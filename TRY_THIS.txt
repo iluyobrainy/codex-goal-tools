@@ -9,6 +9,11 @@ Requirements:
 - A Codex thread opened in the workspace you test from.
 
 Install:
+Automatic install from GitHub:
+
+   irm https://raw.githubusercontent.com/iluyobrainy/codex-goal-tools/main/install.ps1 | iex
+
+Manual install:
 1. Add this folder as a local plugin marketplace:
 
    codex plugin marketplace add "<path-to-this-folder>"
@@ -40,6 +45,7 @@ Direct backend smoke test:
 Run this from a workspace that has a Codex thread:
 
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" setup --workspace "<your-workspace-path>"
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" bootstrap --workspace "<your-workspace-path>"
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" smoke-test --workspace "<your-workspace-path>"
 
 Expected result:

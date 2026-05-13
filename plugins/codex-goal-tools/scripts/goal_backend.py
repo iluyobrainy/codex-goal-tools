@@ -176,6 +176,32 @@ def ensure_goals_feature_enabled(config_path: str | None = None) -> dict[str, An
     }
 
 
+def infer_marketplace_file() -> Path:
+    script_path = Path(__file__).resolve()
+    marketplace_root = script_path.parents[3]
+    marketplace_file = marketplace_root / ".agents" / "plugins" / "marketplace.json"
+    if not marketplace_file.exists():
+        raise RuntimeError(f"Could not infer marketplace file from script path: {script_path}")
+    return marketplace_file
+
+
+def normalize_marketplace_path(value: str | None) -> str:
+    if value:
+        return str(Path(value).expanduser().resolve())
+    return str(infer_marketplace_file())
+
+
+def install_plugin(client: AppServerClient, marketplace_path: str | None = None) -> dict[str, Any]:
+    marketplace_file = normalize_marketplace_path(marketplace_path)
+    return client.request(
+        "plugin/install",
+        {
+            "marketplacePath": marketplace_file,
+            "pluginName": "codex-goal-tools",
+        },
+    )
+
+
 def initialize(client: AppServerClient) -> None:
     client.request(
         "initialize",
@@ -222,18 +248,52 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--workspace", help="Workspace path used to infer the latest thread.")
     common.add_argument("--thread-id", help="Explicit Codex thread id.")
     common.add_argument("--config-path", help="Optional Codex config.toml path for setup.")
+    common.add_argument("--marketplace-path", help="Optional marketplace.json path for plugin install.")
 
     set_parser = subparsers.add_parser("set", parents=[common], help="Set native thread goal.")
     set_parser.add_argument("--goal", required=True, help="Goal objective.")
     set_parser.add_argument("--token-budget", type=int, default=None, help="Optional token budget.")
 
-    for name in ("setup", "status", "show", "pause", "resume", "complete", "clear", "smoke-test"):
+    for name in (
+        "bootstrap",
+        "install-plugin",
+        "setup",
+        "status",
+        "show",
+        "pause",
+        "resume",
+        "complete",
+        "clear",
+        "smoke-test",
+    ):
         subparsers.add_parser(name, parents=[common], help=f"{name.title()} native thread goal.")
 
     return parser
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if args.command in {"bootstrap", "install-plugin"}:
+        result: dict[str, Any] = {"ok": True}
+        if args.command == "bootstrap":
+            result["setup"] = ensure_goals_feature_enabled(args.config_path)
+
+        client = AppServerClient()
+        try:
+            initialize(client)
+            result["pluginInstall"] = install_plugin(client, args.marketplace_path)
+            result["pluginId"] = "codex-goal-tools@codex-goal-tools"
+            try:
+                thread_id = with_thread_id(args, client)
+                result["goalStatus"] = client.request("thread/goal/get", {"threadId": thread_id})
+                result["_native_goal_backend"] = True
+                result["_thread_id"] = thread_id
+            except Exception as exc:
+                result["_native_goal_backend"] = False
+                result["nativeCheckWarning"] = str(exc)
+            return result
+        finally:
+            client.close()
+
     if args.command == "setup":
         result: dict[str, Any] = {
             "ok": True,
