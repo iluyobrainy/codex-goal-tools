@@ -13,9 +13,11 @@ Install:
 
    codex plugin marketplace add "<path-to-this-folder>"
 
-2. Restart Codex Desktop if the marketplace/skill does not appear immediately.
+2. Install/enable "Codex Goal Tools" from the plugin list.
 
-3. Run setup in Codex Desktop:
+3. Restart Codex Desktop if the skill does not appear immediately.
+
+4. Run setup in Codex Desktop:
 
    $goal-native setup
 

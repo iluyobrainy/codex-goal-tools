@@ -29,6 +29,8 @@ class AppServerClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
         assert self._process.stdin is not None

@@ -14,7 +14,7 @@ Git ref: main
 Sparse paths: leave empty
 ```
 
-Restart Codex Desktop if the skill does not appear immediately.
+After adding the marketplace, install/enable **Codex Goal Tools** from the plugin list. Restart Codex Desktop if the skill does not appear immediately.
 
 ## Install From CLI
 
