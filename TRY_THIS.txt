@@ -1,0 +1,54 @@
+Codex Goal Tools quick test
+
+What this is:
+This package exposes Codex's native experimental thread goal backend in Codex Desktop through the bundled codex-goal-tools:goal-native skill. It is not a fake goal store.
+
+Requirements:
+- Codex CLI/Desktop with experimental goals support.
+- Python available on PATH.
+- A Codex thread opened in the workspace you test from.
+
+Install:
+1. Add this folder as a local plugin marketplace:
+
+   codex plugin marketplace add "<path-to-this-folder>"
+
+2. Restart Codex Desktop if the marketplace/skill does not appear immediately.
+
+3. Run setup in Codex Desktop:
+
+   $goal-native setup
+
+   This safely ensures ~/.codex/config.toml contains:
+
+   [features]
+   goals = true
+
+   If it changes an existing config file, it writes a timestamped .bak backup first.
+
+Test in Codex Desktop:
+- Type: $goal-native status
+- Or use the explicit plugin skill name if shown: $codex-goal-tools:goal-native status
+
+Expected result:
+- _native_goal_backend: true
+- goal: none, or your current active goal
+
+Direct backend smoke test:
+Run this from a workspace that has a Codex thread:
+
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" setup --workspace "<your-workspace-path>"
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" smoke-test --workspace "<your-workspace-path>"
+
+Expected result:
+- ok: true
+- _native_goal_backend: true
+- verifiedObjective matches setObjective
+
+Set a test goal:
+
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" set --workspace "<your-workspace-path>" --goal "Test native goal bridge"
+
+Clear it:
+
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" clear --workspace "<your-workspace-path>"

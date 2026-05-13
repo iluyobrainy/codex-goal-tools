@@ -1,0 +1,41 @@
+---
+description: Best-effort local /goal command that calls Codex's native thread goal backend.
+---
+
+# /goal
+
+Use this command only when the native Desktop `/goal` composer command is not available. This local plugin command intentionally mirrors the experimental `/goal` behavior by calling the real Codex `thread/goal/*` backend through:
+
+```powershell
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py
+```
+
+## Arguments
+
+- No arguments, `show`, or `status`: show the current native goal.
+- `set <objective>` or free-form objective text: set the native goal objective.
+- `pause`: pause the native goal.
+- `resume`: resume the native goal.
+- `complete`: mark the native goal complete.
+- `clear`: clear the native goal.
+
+## Workflow
+
+1. Parse the text after `/goal`.
+2. Use the current workspace path for `--workspace`.
+3. Run the matching `goal_backend.py` operation.
+4. Confirm `_native_goal_backend: true` in the output.
+
+## Verification
+
+For testing, set a temporary goal, read it back, then clear it:
+
+```powershell
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py set --workspace C:\Users\LENOVO\Desktop\iqoption --goal "Temporary native goal command test"
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py status --workspace C:\Users\LENOVO\Desktop\iqoption
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py clear --workspace C:\Users\LENOVO\Desktop\iqoption
+```
+
+## Summary
+
+Keep the response short and make clear whether the plugin command reached the native backend.

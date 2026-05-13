@@ -1,0 +1,35 @@
+{
+  "name": "codex-goal-tools",
+  "version": "0.2.0",
+  "description": "Expose Codex's native experimental thread goal backend in Codex Desktop.",
+  "author": {
+    "name": "Iluyo Brainy",
+    "url": "https://github.com/iluyobrainy"
+  },
+  "homepage": "https://github.com/iluyobrainy/codex-goal-tools",
+  "repository": "https://github.com/iluyobrainy/codex-goal-tools",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "goal",
+    "slash-command",
+    "app-server"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Goal Tools",
+    "shortDescription": "Native Codex goal slash commands",
+    "longDescription": "Adds local slash-command workflows that call Codex's native thread/goal app-server API for setting, viewing, pausing, resuming, completing, and clearing long-running task goals.",
+    "developerName": "Iluyo Brainy",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://developers.openai.com/codex/",
+    "privacyPolicyURL": "https://openai.com/policies/privacy-policy/",
+    "termsOfServiceURL": "https://openai.com/policies/terms-of-use/",
+    "defaultPrompt": "Use $goal-native setup, then $goal-native status.",
+    "brandColor": "#0F766E"
+  }
+}

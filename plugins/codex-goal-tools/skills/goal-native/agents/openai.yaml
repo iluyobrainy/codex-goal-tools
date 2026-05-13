@@ -1,0 +1,3 @@
+display_name: Goal Native
+short_description: Native Codex thread goal bridge.
+default_prompt: /goal-native status
