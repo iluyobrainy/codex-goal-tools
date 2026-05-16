@@ -21,8 +21,27 @@ DEFAULT_COMPACT_PROMPT = (
     "Summarize this thread so the active goal can continue after context "
     "compaction. Preserve the current goal objective and status, completed "
     "work, remaining tasks, important files, commands, failures, decisions, "
-    "and the next concrete action."
+    "and the next concrete action. After compaction, resume the active goal "
+    "from the next concrete action without asking the user to restate context."
 )
+
+
+def resolve_codex_executable() -> str:
+    override = os.environ.get("CODEX_CLI_PATH")
+    if override:
+        return str(Path(override).expanduser())
+
+    candidates: list[Path] = []
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidates.append(Path(local_app_data) / "OpenAI" / "Codex" / "bin" / "codex.exe")
+    candidates.append(Path.home() / "AppData" / "Local" / "OpenAI" / "Codex" / "bin" / "codex.exe")
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    return "codex"
 
 
 class AppServerClient:
@@ -31,7 +50,7 @@ class AppServerClient:
         self._stdout: "queue.Queue[dict[str, Any]]" = queue.Queue()
         self._stderr: "queue.Queue[str]" = queue.Queue()
         self._process = subprocess.Popen(
-            ["codex", "app-server", "--enable", "goals"],
+            [resolve_codex_executable(), "app-server", "--enable", "goals"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -303,6 +322,49 @@ def with_thread_id(args: argparse.Namespace, client: AppServerClient) -> str:
     return args.thread_id or infer_thread_id(client, normalize_workspace(args.workspace))
 
 
+def parse_backend_error(error: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(error)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def is_usage_limit_error(error: str) -> bool:
+    payload = parse_backend_error(error) or {}
+    message = str(payload.get("message") or error)
+    code = str(payload.get("code") or payload.get("codex_error_info") or "")
+    haystack = f"{code}\n{message}".lower()
+    return "usage_limit_exceeded" in haystack or "usage limit" in haystack
+
+
+def deferred_compaction_response(
+    thread_id: str,
+    error: str,
+    *,
+    loaded_thread_before_compact: bool = False,
+) -> dict[str, Any]:
+    payload = parse_backend_error(error)
+    result: dict[str, Any] = {
+        "ok": True,
+        "threadId": thread_id,
+        "compactStarted": False,
+        "compactDeferred": True,
+        "goalContinues": True,
+        "reason": (
+            "Remote context compaction could not start right now. "
+            "The active goal remains valid and should continue; retry compaction later."
+        ),
+    }
+    if loaded_thread_before_compact:
+        result["loadedThreadBeforeCompact"] = True
+    if payload:
+        result["backendError"] = payload
+    else:
+        result["backendError"] = {"message": error}
+    return result
+
+
 def start_context_compaction(client: AppServerClient, thread_id: str) -> dict[str, Any]:
     try:
         result = client.request("thread/compact/start", {"threadId": thread_id})
@@ -312,13 +374,33 @@ def start_context_compaction(client: AppServerClient, thread_id: str) -> dict[st
             "compactStarted": True,
             "response": result,
         }
+    except TimeoutError as exc:
+        return deferred_compaction_response(thread_id, str(exc))
     except RuntimeError as exc:
         error = str(exc)
+        if is_usage_limit_error(error):
+            return deferred_compaction_response(thread_id, error)
         if "thread not found" not in error:
             raise
 
     client.request("thread/resume", {"threadId": thread_id})
-    result = client.request("thread/compact/start", {"threadId": thread_id})
+    try:
+        result = client.request("thread/compact/start", {"threadId": thread_id})
+    except TimeoutError as exc:
+        return deferred_compaction_response(
+            thread_id,
+            str(exc),
+            loaded_thread_before_compact=True,
+        )
+    except RuntimeError as exc:
+        error = str(exc)
+        if is_usage_limit_error(error):
+            return deferred_compaction_response(
+                thread_id,
+                error,
+                loaded_thread_before_compact=True,
+            )
+        raise
     return {
         "ok": True,
         "threadId": thread_id,
@@ -434,6 +516,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             result["nativeCheckWarning"] = str(exc)
         return result
 
+    auto_compact_setup = None
+    if args.command in {"set", "resume"}:
+        auto_compact_setup = ensure_goals_feature_enabled(
+            args.config_path,
+            auto_compact=not args.no_auto_compact,
+            auto_compact_token_limit=args.auto_compact_token_limit,
+            compact_prompt=args.compact_prompt,
+        )
+
     client = AppServerClient()
     try:
         initialize(client)
@@ -448,12 +539,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             if args.token_budget is not None:
                 params["tokenBudget"] = args.token_budget
             result = client.request("thread/goal/set", params)
+            result["autoCompact"] = auto_compact_setup
         elif args.command in {"status", "show"}:
             result = client.request("thread/goal/get", {"threadId": thread_id})
         elif args.command == "pause":
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "paused"})
         elif args.command == "resume":
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "active"})
+            result["autoCompact"] = auto_compact_setup
         elif args.command == "complete":
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "complete"})
         elif args.command == "clear":
@@ -474,7 +567,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             else:
                 result = start_context_compaction(client, thread_id)
                 result["goal"] = goal
-            result["_native_compact_backend"] = bool(result.get("compactStarted"))
+            result["_native_compact_backend"] = bool(
+                result.get("compactStarted") or result.get("compactDeferred")
+            )
         elif args.command == "smoke-test":
             previous = client.request("thread/goal/get", {"threadId": thread_id}).get("goal")
             probe = f"Goal backend smoke test {int(time.time())}"

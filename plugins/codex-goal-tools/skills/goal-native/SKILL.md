@@ -23,9 +23,9 @@ Supported actions:
 
 - `setup`: ensure `~/.codex/config.toml` contains `[features] goals = true`, add native auto-compaction defaults, then check the native backend when a thread is available.
 - `status`: show the current native goal.
-- `set --goal "<objective>"`: set the current native goal objective.
+- `set --goal "<objective>"`: set the current native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the current native goal.
-- `resume`: resume the current native goal.
+- `resume`: resume the current native goal and ensure 200k auto-compaction is active.
 - `complete`: mark the current native goal complete.
 - `clear`: clear the current native goal.
 - `compact`: start native context compaction for this thread.
@@ -39,6 +39,8 @@ Setup accepts optional flags:
 - `--compact-prompt "<prompt>"`: set the prompt used by Codex when compacting context.
 
 Native context compaction is itself a Codex turn. Use `compact` or `auto-compact` only at a convenient idle checkpoint before continuing goal work; it cannot safely interrupt an already-running model turn.
+
+If compacting returns `compactDeferred: true`, treat it as a graceful non-blocking result: the active goal is still valid, work can continue, and compaction can be retried later.
 
 ## Usage
 
@@ -54,4 +56,4 @@ Parse the user's text after `/goal-native` or `goal-native`:
 
 After every action, report whether `_native_goal_backend` is `true`. Keep the response short and include the active objective/status when present.
 
-For `compact` and `auto-compact`, report whether `_native_compact_backend` is `true` and whether `compactStarted` is `true`. If compaction is skipped or rejected, include the reason.
+For `compact` and `auto-compact`, report whether `_native_compact_backend` is `true` and whether `compactStarted` is `true`. If `compactDeferred` is `true`, say compaction was deferred but the goal continues. If compaction is skipped or rejected for another reason, include the reason.

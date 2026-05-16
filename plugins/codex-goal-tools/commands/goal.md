@@ -13,15 +13,15 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 ## Arguments
 
 - No arguments, `show`, or `status`: show the current native goal.
-- `set <objective>` or free-form objective text: set the native goal objective.
+- `set <objective>` or free-form objective text: set the native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the native goal.
-- `resume`: resume the native goal.
+- `resume`: resume the native goal and ensure 200k auto-compaction is active.
 - `complete`: mark the native goal complete.
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: compact only when this thread has an active native goal.
 
-`setup` and `bootstrap` also configure Codex's native auto-compaction defaults:
+`setup`, `bootstrap`, `set`, and `resume` also configure Codex's native auto-compaction defaults:
 
 ```toml
 model_auto_compact_token_limit = 200000
@@ -34,9 +34,9 @@ compact_prompt = "Summarize this thread so the active goal can continue after co
 2. Use the current workspace path for `--workspace`.
 3. Run the matching `goal_backend.py` operation.
 4. Confirm `_native_goal_backend: true` in the output.
-5. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts.
+5. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts. If the remote compact task is temporarily rejected or times out, treat `compactDeferred: true` and `goalContinues: true` as a graceful non-blocking result.
 
-Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn.
+Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn. The plugin must not fail the goal just because compacting is deferred.
 
 ## Verification
 
