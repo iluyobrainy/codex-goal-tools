@@ -10,6 +10,16 @@ Use this command only when the native Desktop `/goal` composer command is not av
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py
 ```
 
+## UI Sync Priority
+
+If the current Codex thread exposes native goal tools, use them first for the pieces they support because they update the Desktop goal pill immediately:
+
+- `get_goal` for status.
+- `create_goal` for a new active goal when there is no existing goal.
+- `update_goal` with `status: "complete"` for genuine completion.
+
+Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and for leaving the paused `Waiting for next goal.` placeholder after a goal completes. The bridge will use the running Desktop app-server proxy when its control socket is available, otherwise it falls back to a direct app-server process.
+
 ## Arguments
 
 - No arguments, `show`, or `status`: show the current native goal.
@@ -34,11 +44,12 @@ compact_prompt = "Summarize this thread so the active goal can continue after co
 2. Use the current workspace path for `--workspace`.
 3. Run the matching `goal_backend.py` operation.
 4. Confirm `_native_goal_backend: true` in the output.
-5. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts. If the remote compact task is temporarily rejected or times out, treat `compactDeferred: true` and `goalContinues: true` as a graceful non-blocking result.
+5. Report `_app_server_transport` when present: `proxy` is live Desktop transport, `direct` is backend state transport.
+6. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts. If the remote compact task is temporarily rejected or times out, treat `compactDeferred: true` and `goalContinues: true` as a graceful non-blocking result.
 
 Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn. The plugin must not fail the goal just because compacting is deferred.
 
-When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
+When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal. If native tools are available, complete through `update_goal` first, then use the bridge to park the placeholder.
 
 ## Verification
 

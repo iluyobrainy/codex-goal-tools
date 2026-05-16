@@ -45,13 +45,59 @@ def resolve_codex_executable() -> str:
     return "codex"
 
 
+def default_codex_home() -> Path:
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return Path(codex_home).expanduser()
+    return Path.home() / ".codex"
+
+
+def default_app_server_control_socket() -> Path:
+    return default_codex_home() / "app-server-control" / "app-server-control.sock"
+
+
+def proxy_env_preference() -> str:
+    value = os.environ.get("CODEX_GOAL_USE_PROXY", "").strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return "force-proxy"
+    if value in {"0", "false", "no", "off"}:
+        return "force-direct"
+    return "auto"
+
+
+def build_app_server_commands() -> list[tuple[str, list[str]]]:
+    codex = resolve_codex_executable()
+    direct = ("direct", [codex, "app-server", "--enable", "goals"])
+    proxy = ("proxy", [codex, "app-server", "proxy", "--enable", "goals"])
+    preference = proxy_env_preference()
+
+    if preference == "force-proxy":
+        return [proxy]
+    if preference == "force-direct":
+        return [direct]
+    if default_app_server_control_socket().exists():
+        return [proxy, direct]
+    return [direct]
+
+
 class AppServerClient:
     def __init__(self) -> None:
         self._next_id = 1
         self._stdout: "queue.Queue[dict[str, Any]]" = queue.Queue()
         self._stderr: "queue.Queue[str]" = queue.Queue()
+        self._pending_commands = build_app_server_commands()
+        self.transport = "unknown"
+        self._process: subprocess.Popen[str]
+        self._start_next_process()
+
+    def _start_next_process(self) -> None:
+        if not self._pending_commands:
+            raise RuntimeError("No codex app-server command is available")
+        self.transport, command = self._pending_commands.pop(0)
+        self._stdout = queue.Queue()
+        self._stderr = queue.Queue()
         self._process = subprocess.Popen(
-            [resolve_codex_executable(), "app-server", "--enable", "goals"],
+            command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -65,6 +111,15 @@ class AppServerClient:
         assert self._process.stderr is not None
         threading.Thread(target=self._read_stdout, daemon=True).start()
         threading.Thread(target=self._read_stderr, daemon=True).start()
+
+    def _restart_after_proxy_failure(self) -> bool:
+        if self.transport != "proxy":
+            return False
+        if not self._pending_commands:
+            return False
+        self.close()
+        self._start_next_process()
+        return True
 
     def _read_stdout(self) -> None:
         assert self._process.stdout is not None
@@ -109,6 +164,8 @@ class AppServerClient:
                 message = self._stdout.get(timeout=0.25)
             except queue.Empty:
                 if self._process.poll() is not None:
+                    if self._restart_after_proxy_failure():
+                        return self.request(method, params)
                     raise RuntimeError("codex app-server exited before responding")
                 continue
 
@@ -136,10 +193,7 @@ def normalize_workspace(value: str | None) -> str:
 
 
 def default_config_path() -> Path:
-    codex_home = os.environ.get("CODEX_HOME")
-    if codex_home:
-        return Path(codex_home).expanduser() / "config.toml"
-    return Path.home() / ".codex" / "config.toml"
+    return default_codex_home() / "config.toml"
 
 
 def quote_toml_string(value: str) -> str:
@@ -505,10 +559,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 thread_id = with_thread_id(args, client)
                 result["goalStatus"] = client.request("thread/goal/get", {"threadId": thread_id})
                 result["_native_goal_backend"] = True
+                result["_app_server_transport"] = client.transport
                 result["_thread_id"] = thread_id
             except Exception as exc:
                 result["_native_goal_backend"] = False
                 result["nativeCheckWarning"] = str(exc)
+                result["_app_server_transport"] = client.transport
             return result
         finally:
             client.close()
@@ -530,6 +586,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 thread_id = with_thread_id(args, client)
                 result["goalStatus"] = client.request("thread/goal/get", {"threadId": thread_id})
                 result["_native_goal_backend"] = True
+                result["_app_server_transport"] = client.transport
                 result["_thread_id"] = thread_id
             finally:
                 client.close()
@@ -633,6 +690,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             raise RuntimeError(f"Unknown command: {args.command}")
 
         result["_native_goal_backend"] = True
+        result["_app_server_transport"] = client.transport
         result["_thread_id"] = thread_id
         return result
     finally:

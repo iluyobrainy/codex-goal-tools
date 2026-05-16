@@ -6,6 +6,8 @@ This is not a fake goal store. The `goal-native` skill calls Codex's native `thr
 
 Version `0.3.0` also adds goal-aware context compaction support. Setup configures Codex's native auto-compaction threshold at `200000` tokens, and `set`/`resume` keep that config active automatically. If the remote compact task is temporarily rejected or times out, the plugin now returns a graceful `compactDeferred` result so the active goal can keep running and retry compaction later.
 
+The skill now prefers Codex Desktop's in-thread native goal tools when they are available, because those emit the live event that keeps the native goal pill visible immediately. The Python bridge remains the fallback for pause/resume/clear/compact and the paused `Waiting for next goal.` state after completion. When Desktop exposes its app-server control socket, the bridge uses the `proxy` transport for better UI sync; otherwise it falls back to direct backend state access.
+
 ## Install From Codex Desktop
 
 Open Plugins, choose **Add marketplace**, then enter:
@@ -75,6 +77,14 @@ Expected:
 ```text
 _native_goal_backend: true
 ```
+
+When using the Python bridge, `_app_server_transport` may also be shown:
+
+```text
+_app_server_transport: proxy
+```
+
+`proxy` means the bridge is connected through the running Desktop app-server. `direct` means the backend state was updated through a separate app-server process, so the Desktop pill may repaint after the next idle/turn boundary.
 
 ## Direct Smoke Test
 

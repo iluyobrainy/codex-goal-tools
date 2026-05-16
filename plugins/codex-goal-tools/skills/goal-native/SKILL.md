@@ -9,6 +9,18 @@ metadata:
 
 This skill is a thin Desktop UI wrapper around Codex's native experimental thread goal backend. It must not store goals itself or emulate goal state.
 
+## UI Sync Priority
+
+When Codex Desktop exposes native goal tools in the current thread, prefer them before the Python bridge for any operation they support. The native tools emit the live goal update events that keep the Desktop goal pill visible immediately.
+
+- Use `get_goal` for status.
+- Use `create_goal` for a new active goal when no goal exists.
+- Use `update_goal` with `status: "complete"` when the current objective is genuinely complete.
+
+Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and the paused `Waiting for next goal.` parking state after completion.
+
+After a genuine completion, first use `update_goal` when available so the UI sees the completion event. Then run the bridge `complete` action to leave the paused `Waiting for next goal.` placeholder. If the bridge reaches the backend but the UI does not repaint immediately, treat the backend state as parked and continue; the native pill may repaint at the next Desktop idle/turn boundary unless the app-server proxy transport is available.
+
 ## Backend
 
 Resolve the plugin-bundled native bridge script relative to this `SKILL.md`:
@@ -57,5 +69,7 @@ Parse the user's text after `/goal-native` or `goal-native`:
 - `test` or `smoke-test`: run `smoke-test`.
 
 After every action, report whether `_native_goal_backend` is `true`. Keep the response short and include the active objective/status when present.
+
+Also report `_app_server_transport` when it is present. `proxy` means the bridge used the running Desktop app-server control socket for better UI sync; `direct` means it used a separate app-server process and may update the UI only after Desktop observes the backend state.
 
 For `compact` and `auto-compact`, report whether `_native_compact_backend` is `true` and whether `compactStarted` is `true`. If `compactDeferred` is `true`, say compaction was deferred but the goal continues. If compaction is skipped or rejected for another reason, include the reason.

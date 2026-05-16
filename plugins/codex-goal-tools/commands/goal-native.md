@@ -6,6 +6,16 @@ description: Set, view, pause, resume, complete, or clear the active native Code
 
 Bridge this slash command to Codex's native `thread/goal/*` app-server backend.
 
+## UI Sync Priority
+
+If the current Codex thread exposes native goal tools, use them first for the pieces they support because they emit the live event that updates the Desktop goal pill immediately:
+
+- `get_goal` for status.
+- `create_goal` for a new active goal when no goal exists.
+- `update_goal` with `status: "complete"` for genuine completion.
+
+Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and for leaving the paused `Waiting for next goal.` placeholder after a goal completes. The bridge will use the running Desktop app-server proxy when its control socket is available, otherwise it falls back to a direct app-server process.
+
 ## Arguments
 
 - No arguments, `show`, or `status`: show the current native goal.
@@ -37,11 +47,11 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 
 ## Verification
 
-After every operation, report whether the JSON output includes `_native_goal_backend: true`. For `set`, include the native `objective`, `status`, `tokensUsed`, and `timeUsedSeconds` fields.
+After every operation, report whether the JSON output includes `_native_goal_backend: true`. Report `_app_server_transport` when it is present: `proxy` is live Desktop transport, `direct` is backend state transport. For `set`, include the native `objective`, `status`, `tokensUsed`, and `timeUsedSeconds` fields.
 
 For `compact` and `auto-compact`, report whether `_native_compact_backend: true` and `compactStarted: true` are present. If `compactDeferred: true` is returned, report it as a graceful non-blocking result and continue the goal. If `compactStarted` is false for another reason, show the returned reason. Native compaction is a Codex turn and is safest at an idle checkpoint before continuing goal work.
 
-When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
+When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal. If native tools are available, complete through `update_goal` first, then use the bridge to park the placeholder.
 
 ## Summary
 
