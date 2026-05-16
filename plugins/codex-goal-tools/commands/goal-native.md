@@ -12,7 +12,7 @@ Bridge this slash command to Codex's native `thread/goal/*` app-server backend.
 - `set <objective>` or any other free-form text: set the native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the native goal.
 - `resume`: resume the native goal and ensure 200k auto-compaction is active.
-- `complete`: mark the native goal complete.
+- `complete`: mark the native goal complete, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for the current thread.
 - `auto-compact`: start native context compaction only when the current thread has an active goal.
@@ -40,6 +40,8 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 After every operation, report whether the JSON output includes `_native_goal_backend: true`. For `set`, include the native `objective`, `status`, `tokensUsed`, and `timeUsedSeconds` fields.
 
 For `compact` and `auto-compact`, report whether `_native_compact_backend: true` and `compactStarted: true` are present. If `compactDeferred: true` is returned, report it as a graceful non-blocking result and continue the goal. If `compactStarted` is false for another reason, show the returned reason. Native compaction is a Codex turn and is safest at an idle checkpoint before continuing goal work.
+
+When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
 
 ## Summary
 

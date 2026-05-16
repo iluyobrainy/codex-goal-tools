@@ -26,7 +26,7 @@ Supported actions:
 - `set --goal "<objective>"`: set the current native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the current native goal.
 - `resume`: resume the current native goal and ensure 200k auto-compaction is active.
-- `complete`: mark the current native goal complete.
+- `complete`: mark the current native goal complete, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `clear`: clear the current native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: start native context compaction only when this thread has an active native goal.
@@ -41,6 +41,8 @@ Setup accepts optional flags:
 Native context compaction is itself a Codex turn. Use `compact` or `auto-compact` only at a convenient idle checkpoint before continuing goal work; it cannot safely interrupt an already-running model turn.
 
 If compacting returns `compactDeferred: true`, treat it as a graceful non-blocking result: the active goal is still valid, work can continue, and compaction can be retried later.
+
+If completing returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
 
 ## Usage
 

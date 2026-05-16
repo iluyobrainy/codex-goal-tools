@@ -24,6 +24,7 @@ DEFAULT_COMPACT_PROMPT = (
     "and the next concrete action. After compaction, resume the active goal "
     "from the next concrete action without asking the user to restate context."
 )
+WAITING_FOR_NEXT_GOAL = "Waiting for next goal."
 
 
 def resolve_codex_executable() -> str:
@@ -410,6 +411,27 @@ def start_context_compaction(client: AppServerClient, thread_id: str) -> dict[st
     }
 
 
+def complete_goal_and_wait(client: AppServerClient, thread_id: str) -> dict[str, Any]:
+    previous = client.request("thread/goal/get", {"threadId": thread_id}).get("goal")
+    completed = client.request("thread/goal/set", {"threadId": thread_id, "status": "complete"})
+    waiting = client.request(
+        "thread/goal/set",
+        {
+            "threadId": thread_id,
+            "objective": WAITING_FOR_NEXT_GOAL,
+            "status": "paused",
+        },
+    )
+    return {
+        "ok": True,
+        "threadId": thread_id,
+        "completed": True,
+        "completedGoal": completed.get("goal") or previous,
+        "waitingForNextGoal": True,
+        "goal": waiting.get("goal"),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Call Codex's native thread/goal backend through app-server."
@@ -548,7 +570,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "active"})
             result["autoCompact"] = auto_compact_setup
         elif args.command == "complete":
-            result = client.request("thread/goal/set", {"threadId": thread_id, "status": "complete"})
+            result = complete_goal_and_wait(client, thread_id)
         elif args.command == "clear":
             result = client.request("thread/goal/clear", {"threadId": thread_id})
         elif args.command == "compact":

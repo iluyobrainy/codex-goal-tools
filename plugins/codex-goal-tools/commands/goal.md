@@ -16,7 +16,7 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 - `set <objective>` or free-form objective text: set the native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the native goal.
 - `resume`: resume the native goal and ensure 200k auto-compaction is active.
-- `complete`: mark the native goal complete.
+- `complete`: mark the native goal complete, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: compact only when this thread has an active native goal.
@@ -37,6 +37,8 @@ compact_prompt = "Summarize this thread so the active goal can continue after co
 5. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts. If the remote compact task is temporarily rejected or times out, treat `compactDeferred: true` and `goalContinues: true` as a graceful non-blocking result.
 
 Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn. The plugin must not fail the goal just because compacting is deferred.
+
+When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
 
 ## Verification
 
