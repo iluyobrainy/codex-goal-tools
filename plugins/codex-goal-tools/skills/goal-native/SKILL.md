@@ -11,15 +11,17 @@ This skill is a thin Desktop UI wrapper around Codex's native experimental threa
 
 ## UI Sync Priority
 
-When Codex Desktop exposes native goal tools in the current thread, prefer them before the Python bridge for any operation they support. The native tools emit the live goal update events that keep the Desktop goal pill visible immediately.
+When Codex Desktop exposes native goal tools in the current thread, use them for starting visible goals because they emit the live goal update event that makes the Desktop goal pill appear immediately.
 
 - Use `get_goal` for status.
 - Use `create_goal` for a new active goal when no goal exists.
-- Use `update_goal` with `status: "complete"` when the current objective is genuinely complete.
+- If the current goal is the paused `Waiting for next goal.` placeholder and the user gives the next objective, clear the placeholder through the bridge, then call `create_goal` for the new objective so the pill appears immediately.
 
-Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and the paused `Waiting for next goal.` parking state after completion.
+Do not call native `update_goal` with `status: "complete"` for normal `/goal` completion. Desktop treats that event as permission to close the pill. Use the Python bridge `complete` action instead; it records the previous objective in the command output and immediately parks the thread at a paused `Waiting for next goal.` goal so the lane remains visible.
 
-After a genuine completion, first use `update_goal` when available so the UI sees the completion event. Then run the bridge `complete` action to leave the paused `Waiting for next goal.` placeholder. If the bridge reaches the backend but the UI does not repaint immediately, treat the backend state as parked and continue; the native pill may repaint at the next Desktop idle/turn boundary unless the app-server proxy transport is available.
+Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and completion-with-waiting-placeholder.
+
+If the bridge reaches the backend but the UI text does not repaint immediately, treat the backend state as authoritative and continue; the key invariant is that completion must not send the native close-pill event.
 
 ## Backend
 
@@ -38,7 +40,7 @@ Supported actions:
 - `set --goal "<objective>"`: set the current native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the current native goal.
 - `resume`: resume the current native goal and ensure 200k auto-compaction is active.
-- `complete`: mark the current native goal complete, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
+- `complete`: finish the current goal without sending the close-pill completion event, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `clear`: clear the current native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: start native context compaction only when this thread has an active native goal.
@@ -54,7 +56,7 @@ Native context compaction is itself a Codex turn. Use `compact` or `auto-compact
 
 If compacting returns `compactDeferred: true`, treat it as a graceful non-blocking result: the active goal is still valid, work can continue, and compaction can be retried later.
 
-If completing returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
+If completing returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
 
 ## Usage
 

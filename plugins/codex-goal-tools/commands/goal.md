@@ -12,13 +12,15 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 
 ## UI Sync Priority
 
-If the current Codex thread exposes native goal tools, use them first for the pieces they support because they update the Desktop goal pill immediately:
+If the current Codex thread exposes native goal tools, use them for starting visible goals because they update the Desktop goal pill immediately:
 
 - `get_goal` for status.
 - `create_goal` for a new active goal when there is no existing goal.
-- `update_goal` with `status: "complete"` for genuine completion.
+- If the current goal is the paused `Waiting for next goal.` placeholder and the user gives the next objective, clear the placeholder through the bridge, then call `create_goal` for the new objective.
 
-Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and for leaving the paused `Waiting for next goal.` placeholder after a goal completes. The bridge will use the running Desktop app-server proxy when its control socket is available, otherwise it falls back to a direct app-server process.
+Do not call native `update_goal` with `status: "complete"` for normal `/goal` completion. Desktop removes the pill when that event is sent. Use the Python bridge `complete` action instead; it records the finished objective in the command output and parks the thread at a paused `Waiting for next goal.` goal so the pill can remain visible.
+
+Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and completion-with-waiting-placeholder. The bridge will use the running Desktop app-server proxy when its control socket is available, otherwise it falls back to a direct app-server process.
 
 ## Arguments
 
@@ -26,7 +28,7 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 - `set <objective>` or free-form objective text: set the native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the native goal.
 - `resume`: resume the native goal and ensure 200k auto-compaction is active.
-- `complete`: mark the native goal complete, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
+- `complete`: finish the native goal without sending the close-pill completion event, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: compact only when this thread has an active native goal.
@@ -49,7 +51,7 @@ compact_prompt = "Summarize this thread so the active goal can continue after co
 
 Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn. The plugin must not fail the goal just because compacting is deferred.
 
-When `complete` returns `waitingForNextGoal: true`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal. If native tools are available, complete through `update_goal` first, then use the bridge to park the placeholder.
+When `complete` returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal. Do not call native `update_goal` afterward, because that closes the pill.
 
 ## Verification
 

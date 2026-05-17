@@ -467,7 +467,10 @@ def start_context_compaction(client: AppServerClient, thread_id: str) -> dict[st
 
 def complete_goal_and_wait(client: AppServerClient, thread_id: str) -> dict[str, Any]:
     previous = client.request("thread/goal/get", {"threadId": thread_id}).get("goal")
-    completed = client.request("thread/goal/set", {"threadId": thread_id, "status": "complete"})
+    completed = dict(previous or {})
+    if completed:
+        completed["status"] = "complete"
+        completed["completedAt"] = int(time.time())
     waiting = client.request(
         "thread/goal/set",
         {
@@ -480,7 +483,9 @@ def complete_goal_and_wait(client: AppServerClient, thread_id: str) -> dict[str,
         "ok": True,
         "threadId": thread_id,
         "completed": True,
-        "completedGoal": completed.get("goal") or previous,
+        "completedGoal": completed or previous,
+        "completionEventSent": False,
+        "pillPreserved": True,
         "waitingForNextGoal": True,
         "goal": waiting.get("goal"),
     }
