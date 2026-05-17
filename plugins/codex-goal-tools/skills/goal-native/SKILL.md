@@ -15,11 +15,11 @@ When Codex Desktop exposes native goal tools in the current thread, use them for
 
 - Use `get_goal` for status.
 - Use `create_goal` for a new active goal when no goal exists.
-- If the current goal is the paused `Waiting for next goal.` placeholder and the user gives the next objective, clear the placeholder through the bridge, then call `create_goal` for the new objective so the pill appears immediately.
+- If the current goal is the visible `Waiting for next goal.` placeholder and the user gives the next objective, clear the placeholder through the bridge, then call `create_goal` for the new objective so the pill appears immediately.
 
-Do not call native `update_goal` with `status: "complete"` for normal `/goal` completion. Desktop treats that event as permission to close the pill. Use the Python bridge `complete` action instead; it records the previous objective in the command output and immediately parks the thread at a paused `Waiting for next goal.` goal so the lane remains visible.
+Do not call native `update_goal` with `status: "complete"` for normal `/goal` completion. Desktop treats that event as permission to close the pill. Use the Python bridge `complete` action instead; it records the previous objective in the command output and immediately parks the thread at a visible `Waiting for next goal.` goal so the lane remains visible.
 
-If a higher-priority active goal instruction requires calling native `update_goal` with `status: "complete"`, call it, then immediately reopen the lane before ending the turn. Prefer `create_goal` with objective `Waiting for next goal.` because it emits the live Desktop event that makes the pill appear, then run the bridge `pause` action to park it. If `create_goal` is unavailable, run the bridge `park` action instead.
+If a higher-priority active goal instruction requires calling native `update_goal` with `status: "complete"`, call it, then immediately reopen the lane before ending the turn. Use `create_goal` with objective `Waiting for next goal.` because it emits the live Desktop event that makes the pill appear. Do not pause this waiting placeholder; paused goals can be hidden by the Desktop UI. If `create_goal` is unavailable, run the bridge `park` action instead.
 
 Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and completion-with-waiting-placeholder.
 
@@ -42,8 +42,8 @@ Supported actions:
 - `set --goal "<objective>"`: set the current native goal objective and ensure 200k auto-compaction is active.
 - `pause`: pause the current native goal.
 - `resume`: resume the current native goal and ensure 200k auto-compaction is active.
-- `complete`: finish the current goal without sending the close-pill completion event, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
-- `park`, `wait`, `waiting`, or `next-goal`: set a paused `Waiting for next goal.` placeholder without claiming that a current goal was completed. Use this after native completion closes the pill only when `create_goal` is unavailable; otherwise create the waiting goal natively and then pause it.
+- `complete`: finish the current goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
+- `park`, `wait`, `waiting`, or `next-goal`: set a visible `Waiting for next goal.` placeholder without claiming that a current goal was completed. Use this after native completion closes the pill only when `create_goal` is unavailable; otherwise create the waiting goal natively.
 - `clear`: clear the current native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: start native context compaction only when this thread has an active native goal.
@@ -59,7 +59,7 @@ Native context compaction is itself a Codex turn. Use `compact` or `auto-compact
 
 If compacting returns `compactDeferred: true`, treat it as a graceful non-blocking result: the active goal is still valid, work can continue, and compaction can be retried later.
 
-If completing or parking returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the current paused placeholder as the user's next-goal parking state.
+If completing or parking returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the current visible placeholder as the user's next-goal parking state.
 
 ## Usage
 

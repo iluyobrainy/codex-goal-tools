@@ -6,9 +6,9 @@ This is not a fake goal store. The `goal-native` skill calls Codex's native `thr
 
 Version `0.3.0` also adds goal-aware context compaction support. Setup configures Codex's native auto-compaction threshold at `200000` tokens, and `set`/`resume` keep that config active automatically. If the remote compact task is temporarily rejected or times out, the plugin now returns a graceful `compactDeferred` result so the active goal can keep running and retry compaction later.
 
-The skill uses Codex Desktop's in-thread native goal tools to start new visible goals, because those emit the live event that makes the native goal pill appear immediately. For completion, the bridge intentionally avoids the native close-pill completion event and parks the thread at a paused `Waiting for next goal.` state instead. When Desktop exposes its app-server control socket, the bridge uses the `proxy` transport for better UI sync; otherwise it falls back to direct backend state access.
+The skill uses Codex Desktop's in-thread native goal tools to start new visible goals, because those emit the live event that makes the native goal pill appear immediately. For completion, the bridge intentionally avoids the native close-pill completion event and parks the thread at a visible `Waiting for next goal.` state instead. When Desktop exposes its app-server control socket, the bridge uses the `proxy` transport for better UI sync; otherwise it falls back to direct backend state access.
 
-If the native goal path has already closed the pill, reopen it by creating a new native goal named `Waiting for next goal.`, then pause it through the bridge. This emits the live Desktop event that makes the pill visible again. If native goal creation is unavailable, use `park` as the backend fallback.
+If the native goal path has already closed the pill, reopen it by creating a new native goal named `Waiting for next goal.` and leave it active. This emits the live Desktop event that makes the pill visible again. Do not pause the waiting placeholder, because paused goals can be hidden by the Desktop UI. If native goal creation is unavailable, use `park` as the backend fallback.
 
 ## Install From Codex Desktop
 
@@ -114,8 +114,8 @@ Expected:
 - `set <objective>`: set the active native goal and ensure 200k auto-compaction is configured.
 - `pause`: pause the active goal.
 - `resume`: resume the active goal and ensure 200k auto-compaction is configured.
-- `complete`: finish the current goal without sending the close-pill completion event, then park at `Waiting for next goal.`.
-- `park`: set a paused `Waiting for next goal.` placeholder without claiming that a goal was completed.
+- `complete`: finish the current goal without sending the close-pill completion event, then park visibly at `Waiting for next goal.`.
+- `park`: set a visible `Waiting for next goal.` placeholder without claiming that a goal was completed.
 - `clear`: clear the goal.
 - `compact`: start native context compaction for the thread.
 - `auto-compact`: start native context compaction only when the thread has an active goal.

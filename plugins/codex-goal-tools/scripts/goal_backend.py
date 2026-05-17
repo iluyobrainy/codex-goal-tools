@@ -485,7 +485,7 @@ def park_waiting_goal(client: AppServerClient, thread_id: str) -> dict[str, Any]
         {
             "threadId": thread_id,
             "objective": WAITING_FOR_NEXT_GOAL,
-            "status": "paused",
+            "status": "active",
         },
     )
     return {
@@ -494,6 +494,7 @@ def park_waiting_goal(client: AppServerClient, thread_id: str) -> dict[str, Any]
         "parked": True,
         "completionEventSent": False,
         "pillPreserved": True,
+        "visiblePlaceholder": True,
         "waitingForNextGoal": True,
         "goal": waiting.get("goal"),
     }
