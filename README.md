@@ -8,6 +8,8 @@ Version `0.3.0` also adds goal-aware context compaction support. Setup configure
 
 The skill uses Codex Desktop's in-thread native goal tools to start new visible goals, because those emit the live event that makes the native goal pill appear immediately. For completion, the bridge intentionally avoids the native close-pill completion event and parks the thread at a paused `Waiting for next goal.` state instead. When Desktop exposes its app-server control socket, the bridge uses the `proxy` transport for better UI sync; otherwise it falls back to direct backend state access.
 
+If the native goal path has already closed the pill, reopen it by creating a new native goal named `Waiting for next goal.`, then pause it through the bridge. This emits the live Desktop event that makes the pill visible again. If native goal creation is unavailable, use `park` as the backend fallback.
+
 ## Install From Codex Desktop
 
 Open Plugins, choose **Add marketplace**, then enter:
@@ -113,6 +115,7 @@ Expected:
 - `pause`: pause the active goal.
 - `resume`: resume the active goal and ensure 200k auto-compaction is configured.
 - `complete`: finish the current goal without sending the close-pill completion event, then park at `Waiting for next goal.`.
+- `park`: set a paused `Waiting for next goal.` placeholder without claiming that a goal was completed.
 - `clear`: clear the goal.
 - `compact`: start native context compaction for the thread.
 - `auto-compact`: start native context compaction only when the thread has an active goal.

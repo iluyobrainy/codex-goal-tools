@@ -471,6 +471,15 @@ def complete_goal_and_wait(client: AppServerClient, thread_id: str) -> dict[str,
     if completed:
         completed["status"] = "complete"
         completed["completedAt"] = int(time.time())
+    parked = park_waiting_goal(client, thread_id)
+    return {
+        **parked,
+        "completed": True,
+        "completedGoal": completed or previous,
+    }
+
+
+def park_waiting_goal(client: AppServerClient, thread_id: str) -> dict[str, Any]:
     waiting = client.request(
         "thread/goal/set",
         {
@@ -482,8 +491,7 @@ def complete_goal_and_wait(client: AppServerClient, thread_id: str) -> dict[str,
     return {
         "ok": True,
         "threadId": thread_id,
-        "completed": True,
-        "completedGoal": completed or previous,
+        "parked": True,
         "completionEventSent": False,
         "pillPreserved": True,
         "waitingForNextGoal": True,
@@ -532,6 +540,10 @@ def build_parser() -> argparse.ArgumentParser:
         "pause",
         "resume",
         "complete",
+        "park",
+        "wait",
+        "waiting",
+        "next-goal",
         "clear",
         "compact",
         "auto-compact",
@@ -633,6 +645,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             result["autoCompact"] = auto_compact_setup
         elif args.command == "complete":
             result = complete_goal_and_wait(client, thread_id)
+        elif args.command in {"park", "wait", "waiting", "next-goal"}:
+            result = park_waiting_goal(client, thread_id)
         elif args.command == "clear":
             result = client.request("thread/goal/clear", {"threadId": thread_id})
         elif args.command == "compact":

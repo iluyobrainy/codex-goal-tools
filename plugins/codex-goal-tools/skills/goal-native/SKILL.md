@@ -19,6 +19,8 @@ When Codex Desktop exposes native goal tools in the current thread, use them for
 
 Do not call native `update_goal` with `status: "complete"` for normal `/goal` completion. Desktop treats that event as permission to close the pill. Use the Python bridge `complete` action instead; it records the previous objective in the command output and immediately parks the thread at a paused `Waiting for next goal.` goal so the lane remains visible.
 
+If a higher-priority active goal instruction requires calling native `update_goal` with `status: "complete"`, call it, then immediately reopen the lane before ending the turn. Prefer `create_goal` with objective `Waiting for next goal.` because it emits the live Desktop event that makes the pill appear, then run the bridge `pause` action to park it. If `create_goal` is unavailable, run the bridge `park` action instead.
+
 Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and completion-with-waiting-placeholder.
 
 If the bridge reaches the backend but the UI text does not repaint immediately, treat the backend state as authoritative and continue; the key invariant is that completion must not send the native close-pill event.
@@ -41,6 +43,7 @@ Supported actions:
 - `pause`: pause the current native goal.
 - `resume`: resume the current native goal and ensure 200k auto-compaction is active.
 - `complete`: finish the current goal without sending the close-pill completion event, then leave a paused `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
+- `park`, `wait`, `waiting`, or `next-goal`: set a paused `Waiting for next goal.` placeholder without claiming that a current goal was completed. Use this after native completion closes the pill only when `create_goal` is unavailable; otherwise create the waiting goal natively and then pause it.
 - `clear`: clear the current native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: start native context compaction only when this thread has an active native goal.
@@ -56,7 +59,7 @@ Native context compaction is itself a Codex turn. Use `compact` or `auto-compact
 
 If compacting returns `compactDeferred: true`, treat it as a graceful non-blocking result: the active goal is still valid, work can continue, and compaction can be retried later.
 
-If completing returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the previous goal as genuinely completed and the current paused placeholder as a parking state for the user's next goal.
+If completing or parking returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the current paused placeholder as the user's next-goal parking state.
 
 ## Usage
 
@@ -65,7 +68,7 @@ Parse the user's text after `/goal-native` or `goal-native`:
 - `setup` or `install`: run `setup`.
 - Empty, `show`, or `status`: run `status`.
 - `set <objective>` or any free-form goal text: run `set --goal "<objective>"`.
-- `pause`, `resume`, `complete`, or `clear`: run the matching action.
+- `pause`, `resume`, `complete`, `park`, `wait`, `waiting`, `next-goal`, or `clear`: run the matching action.
 - `compact`: run `compact`.
 - `auto-compact`, `autocompact`, or `compact-if-goal`: run `auto-compact`.
 - `test` or `smoke-test`: run `smoke-test`.
