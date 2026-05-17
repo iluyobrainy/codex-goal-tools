@@ -2,7 +2,7 @@ Codex Goal Tools quick test
 
 What this is:
 This package exposes Codex's native experimental thread goal backend in Codex Desktop through the bundled codex-goal-tools:goal-native skill. It is not a fake goal store.
-It also configures Codex's native auto-compaction defaults and exposes compact/auto-compact helpers for long-running goals.
+It exposes compact/auto-compact helpers for long-running goals, but automatic compaction is not enabled by default.
 
 Requirements:
 - Codex CLI/Desktop with experimental goals support.
@@ -32,12 +32,11 @@ Manual install:
    [features]
    goals = true
 
-   It also adds:
+   It does not add automatic compaction settings. If you previously installed a version that added them, run:
 
-   model_auto_compact_token_limit = 200000
-   compact_prompt = "Summarize this thread so the active goal can continue after context compaction..."
+   $goal-native disable-auto-compact
 
-   If it changes an existing config file, it writes a timestamped .bak backup first.
+   If setup changes an existing config file, it writes a timestamped .bak backup first.
 
 Test in Codex Desktop:
 - Type: $goal-native status
@@ -54,6 +53,7 @@ Run this from a workspace that has a Codex thread:
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" bootstrap --workspace "<your-workspace-path>"
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" smoke-test --workspace "<your-workspace-path>"
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" auto-compact --workspace "<your-workspace-path>"
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" disable-auto-compact --workspace "<your-workspace-path>"
 
 Expected result:
 - ok: true

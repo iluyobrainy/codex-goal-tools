@@ -4,7 +4,7 @@ Expose Codex's native experimental thread goal backend in Codex Desktop through 
 
 This is not a fake goal store. The `goal-native` skill calls Codex's native `thread/goal/*` app-server API.
 
-Version `0.3.0` also adds goal-aware context compaction support. Setup configures Codex's native auto-compaction threshold at `200000` tokens, and `set`/`resume` keep that config active automatically. If the remote compact task is temporarily rejected or times out, the plugin now returns a graceful `compactDeferred` result so the active goal can keep running and retry compaction later.
+Version `0.3.0` also adds goal-aware context compaction support, but automatic compaction is no longer enabled by default. Normal `set` and `resume` calls use Codex's native `thread/goal/*` backend only. Run `compact` or `auto-compact` explicitly at an idle checkpoint when you want compaction, or opt in to native automatic compaction with `setup --auto-compact`. If the remote compact task is temporarily rejected or times out, the plugin returns a graceful `compactDeferred` result so the active goal can keep running and retry compaction later.
 
 The skill uses Codex Desktop's in-thread native goal tools to start new visible goals, because those emit the live event that makes the native goal pill appear immediately. For completion, the bridge intentionally avoids the native close-pill completion event and parks the thread at a visible `Waiting for next goal.` state instead. When Desktop exposes its app-server control socket, the bridge uses the `proxy` transport for better UI sync; otherwise it falls back to direct backend state access.
 
@@ -55,16 +55,15 @@ This safely ensures `~/.codex/config.toml` contains:
 goals = true
 ```
 
-It also adds native auto-compaction defaults:
+It does not add native auto-compaction defaults. That keeps `/goal` close to the old native `thread/goal` behavior and avoids remote compaction failures interrupting normal goal work.
 
-```toml
-model_auto_compact_token_limit = 200000
-compact_prompt = "Summarize this thread so the active goal can continue after context compaction..."
+If you previously installed a version that added auto-compaction keys, run:
+
+```text
+$goal-native disable-auto-compact
 ```
 
-`set` and `resume` also verify those defaults, so normal goal usage keeps auto-compaction active.
-
-Use `--no-auto-compact` with the backend script if you want setup to leave those config keys untouched.
+To opt in to Codex's native automatic compaction config, run the backend script with `setup --auto-compact` or `bootstrap --auto-compact`.
 
 If setup changes an existing config file, it creates a timestamped `.bak` backup first.
 
@@ -111,33 +110,34 @@ Expected:
 - `bootstrap`: install/enable the plugin, enable native goals in `config.toml`, and verify backend access when possible.
 - `install-plugin`: install/enable the plugin from its marketplace.
 - `status`: show the current thread goal.
-- `set <objective>`: set the active native goal and ensure 200k auto-compaction is configured.
+- `set <objective>`: set the active native goal without changing compaction settings.
 - `pause`: pause the active goal.
-- `resume`: resume the active goal and ensure 200k auto-compaction is configured.
+- `resume`: resume the active goal without changing compaction settings.
 - `complete`: finish the current goal without sending the close-pill completion event, then park visibly at `Waiting for next goal.`.
 - `park`: set a visible `Waiting for next goal.` placeholder without claiming that a goal was completed.
 - `clear`: clear the goal.
 - `compact`: start native context compaction for the thread.
 - `auto-compact`: start native context compaction only when the thread has an active goal.
+- `disable-auto-compact`: remove plugin-added automatic compaction config keys.
 - `smoke-test`: temporarily set/verify a goal, then restore the previous goal.
 
 Native context compaction is itself a Codex turn. It is safest at a quiet checkpoint before continuing a goal; it cannot interrupt an already-running model turn from inside that same turn.
 
 ## Auto-Compact Usage
 
-After install or update, run:
-
-```text
-$goal-native setup
-```
-
-Then, before continuing a long goal when the context is getting heavy, run:
+Before continuing a long goal when the context is getting heavy and the thread is idle, run:
 
 ```text
 $goal-native auto-compact
 ```
 
 The command reports `_native_compact_backend: true` and `compactStarted: true` when Codex accepts the compaction request. If Codex cannot start the remote compact task right then, the command returns `compactDeferred: true`, `goalContinues: true`, and exits cleanly so the goal can continue.
+
+To opt in to automatic compaction config:
+
+```text
+$goal-native setup --auto-compact
+```
 
 ## Notes
 

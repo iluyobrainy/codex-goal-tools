@@ -233,7 +233,7 @@ def upsert_top_level_key(lines: list[str], key: str, value: str) -> tuple[list[s
 def ensure_goals_feature_enabled(
     config_path: str | None = None,
     *,
-    auto_compact: bool = True,
+    auto_compact: bool = False,
     auto_compact_token_limit: int = DEFAULT_AUTO_COMPACT_TOKEN_LIMIT,
     compact_prompt: str | None = DEFAULT_COMPACT_PROMPT,
 ) -> dict[str, Any]:
@@ -312,6 +312,69 @@ def ensure_goals_feature_enabled(
         "autoCompactEnabled": auto_compact_enabled,
         "autoCompactTokenLimit": auto_compact_token_limit if auto_compact else None,
         "compactPromptConfigured": bool(compact_prompt) if auto_compact else False,
+    }
+
+
+def remove_top_level_keys(lines: list[str], keys: set[str]) -> tuple[list[str], list[str]]:
+    output: list[str] = []
+    removed: list[str] = []
+    in_top_level = True
+
+    for line in lines:
+        stripped = line.strip()
+        is_section = stripped.startswith("[") and stripped.endswith("]")
+        if is_section:
+            in_top_level = False
+            output.append(line)
+            continue
+
+        if in_top_level:
+            key = stripped.split("=", 1)[0].strip() if "=" in stripped else ""
+            if key in keys:
+                removed.append(key)
+                continue
+
+        output.append(line)
+
+    return output, removed
+
+
+def disable_auto_compact_config(config_path: str | None = None) -> dict[str, Any]:
+    path = Path(config_path).expanduser() if config_path else default_config_path()
+    path = path.resolve()
+
+    if not path.exists():
+        return {
+            "configPath": str(path),
+            "changed": False,
+            "removedKeys": [],
+            "autoCompactEnabled": False,
+            "reason": "Config file does not exist.",
+        }
+
+    original = path.read_text(encoding="utf-8")
+    newline = "\r\n" if "\r\n" in original else "\n"
+    output, removed = remove_top_level_keys(
+        original.splitlines(),
+        {"model_auto_compact_token_limit", "compact_prompt"},
+    )
+    updated = newline.join(output)
+    if updated:
+        updated += newline
+
+    changed = updated != original
+    backup_path = None
+    if changed:
+        backup_path = path.with_name(f"{path.name}.bak-{time.strftime('%Y%m%d%H%M%S')}")
+        backup_path.write_text(original, encoding="utf-8")
+        path.write_text(updated, encoding="utf-8")
+
+    return {
+        "configPath": str(path),
+        "changed": changed,
+        "backupPath": str(backup_path) if backup_path else None,
+        "removedKeys": sorted(set(removed)),
+        "autoCompactEnabled": False,
     }
 
 
@@ -514,7 +577,12 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument(
         "--no-auto-compact",
         action="store_true",
-        help="Do not add native Codex auto-compact defaults during setup/bootstrap.",
+        help="Deprecated compatibility flag. Auto-compaction config is off by default.",
+    )
+    common.add_argument(
+        "--auto-compact",
+        action="store_true",
+        help="Opt in to adding native Codex auto-compact defaults during setup/bootstrap.",
     )
     common.add_argument(
         "--auto-compact-token-limit",
@@ -536,6 +604,8 @@ def build_parser() -> argparse.ArgumentParser:
         "bootstrap",
         "install-plugin",
         "setup",
+        "disable-auto-compact",
+        "disable-autocompact",
         "status",
         "show",
         "pause",
@@ -563,7 +633,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if args.command == "bootstrap":
             result["setup"] = ensure_goals_feature_enabled(
                 args.config_path,
-                auto_compact=not args.no_auto_compact,
+                auto_compact=args.auto_compact and not args.no_auto_compact,
                 auto_compact_token_limit=args.auto_compact_token_limit,
                 compact_prompt=args.compact_prompt,
             )
@@ -592,7 +662,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "ok": True,
             "setup": ensure_goals_feature_enabled(
                 args.config_path,
-                auto_compact=not args.no_auto_compact,
+                auto_compact=args.auto_compact and not args.no_auto_compact,
                 auto_compact_token_limit=args.auto_compact_token_limit,
                 compact_prompt=args.compact_prompt,
             ),
@@ -613,14 +683,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             result["nativeCheckWarning"] = str(exc)
         return result
 
-    auto_compact_setup = None
-    if args.command in {"set", "resume"}:
-        auto_compact_setup = ensure_goals_feature_enabled(
-            args.config_path,
-            auto_compact=not args.no_auto_compact,
-            auto_compact_token_limit=args.auto_compact_token_limit,
-            compact_prompt=args.compact_prompt,
-        )
+    if args.command in {"disable-auto-compact", "disable-autocompact"}:
+        return {
+            "ok": True,
+            "autoCompact": disable_auto_compact_config(args.config_path),
+        }
 
     client = AppServerClient()
     try:
@@ -636,14 +703,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             if args.token_budget is not None:
                 params["tokenBudget"] = args.token_budget
             result = client.request("thread/goal/set", params)
-            result["autoCompact"] = auto_compact_setup
         elif args.command in {"status", "show"}:
             result = client.request("thread/goal/get", {"threadId": thread_id})
         elif args.command == "pause":
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "paused"})
         elif args.command == "resume":
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "active"})
-            result["autoCompact"] = auto_compact_setup
         elif args.command == "complete":
             result = complete_goal_and_wait(client, thread_id)
         elif args.command in {"park", "wait", "waiting", "next-goal"}:

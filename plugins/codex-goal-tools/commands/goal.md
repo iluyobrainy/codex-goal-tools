@@ -27,16 +27,17 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 ## Arguments
 
 - No arguments, `show`, or `status`: show the current native goal.
-- `set <objective>` or free-form objective text: set the native goal objective and ensure 200k auto-compaction is active.
+- `set <objective>` or free-form objective text: set the native goal objective without changing compaction settings.
 - `pause`: pause the native goal.
-- `resume`: resume the native goal and ensure 200k auto-compaction is active.
+- `resume`: resume the native goal without changing compaction settings.
 - `complete`: finish the native goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `park`, `wait`, `waiting`, or `next-goal`: set a visible `Waiting for next goal.` placeholder without claiming that a goal was completed.
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: compact only when this thread has an active native goal.
+- `disable-auto-compact`: remove plugin-added automatic compaction config keys.
 
-`setup`, `bootstrap`, `set`, and `resume` also configure Codex's native auto-compaction defaults:
+`setup`, `bootstrap`, `set`, and `resume` do not enable automatic compaction by default. To opt in, run the backend setup/bootstrap command with `--auto-compact`, which configures:
 
 ```toml
 model_auto_compact_token_limit = 200000
@@ -51,6 +52,7 @@ compact_prompt = "Summarize this thread so the active goal can continue after co
 4. Confirm `_native_goal_backend: true` in the output.
 5. Report `_app_server_transport` when present: `proxy` is live Desktop transport, `direct` is backend state transport.
 6. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts. If the remote compact task is temporarily rejected or times out, treat `compactDeferred: true` and `goalContinues: true` as a graceful non-blocking result.
+7. For `disable-auto-compact`, confirm the returned `removedKeys` list and that `autoCompactEnabled` is `false`.
 
 Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn. The plugin must not fail the goal just because compacting is deferred.
 
@@ -65,6 +67,7 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py status --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py clear --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py disable-auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption
 ```
 
 ## Summary

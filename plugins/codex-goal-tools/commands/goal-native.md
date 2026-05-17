@@ -23,16 +23,17 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 ## Arguments
 
 - No arguments, `show`, or `status`: show the current native goal.
-- `set <objective>` or any other free-form text: set the native goal objective and ensure 200k auto-compaction is active.
+- `set <objective>` or any other free-form text: set the native goal objective without changing compaction settings.
 - `pause`: pause the native goal.
-- `resume`: resume the native goal and ensure 200k auto-compaction is active.
+- `resume`: resume the native goal without changing compaction settings.
 - `complete`: finish the native goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `park`, `wait`, `waiting`, or `next-goal`: set a visible `Waiting for next goal.` placeholder without claiming that a goal was completed.
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for the current thread.
 - `auto-compact`: start native context compaction only when the current thread has an active goal.
+- `disable-auto-compact`: remove plugin-added automatic compaction config keys.
 
-`setup`, `bootstrap`, `set`, and `resume` enable Codex's native goals feature and add native auto-compaction defaults unless `--no-auto-compact` is used.
+`setup`, `bootstrap`, `set`, and `resume` do not enable automatic compaction by default. Use backend `setup --auto-compact` or `bootstrap --auto-compact` only when the user explicitly wants Codex's native automatic compaction config.
 
 ## Workflow
 
@@ -49,6 +50,7 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py park --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py clear --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py disable-auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption
 ```
 
 ## Verification

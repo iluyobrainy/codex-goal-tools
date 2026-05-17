@@ -21,7 +21,7 @@ Do not call native `update_goal` with `status: "complete"` for normal `/goal` co
 
 If a higher-priority active goal instruction requires calling native `update_goal` with `status: "complete"`, call it, then immediately reopen the lane before ending the turn. Use `create_goal` with objective `Waiting for next goal.` because it emits the live Desktop event that makes the pill appear. Do not pause this waiting placeholder; paused goals can be hidden by the Desktop UI. If `create_goal` is unavailable, run the bridge `park` action instead.
 
-Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and completion-with-waiting-placeholder.
+Use the Python bridge below for capabilities the exposed native tools do not currently provide: `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, `disable-auto-compact`, and completion-with-waiting-placeholder.
 
 If the bridge reaches the backend but the UI text does not repaint immediately, treat the backend state as authoritative and continue; the key invariant is that completion must not send the native close-pill event.
 
@@ -37,23 +37,25 @@ python $script <action> --workspace "<current workspace path>"
 
 Supported actions:
 
-- `setup`: ensure `~/.codex/config.toml` contains `[features] goals = true`, add native auto-compaction defaults, then check the native backend when a thread is available.
+- `setup`: ensure `~/.codex/config.toml` contains `[features] goals = true`, then check the native backend when a thread is available. It does not add auto-compaction defaults unless `--auto-compact` is passed.
 - `status`: show the current native goal.
-- `set --goal "<objective>"`: set the current native goal objective and ensure 200k auto-compaction is active.
+- `set --goal "<objective>"`: set the current native goal objective without changing compaction settings.
 - `pause`: pause the current native goal.
-- `resume`: resume the current native goal and ensure 200k auto-compaction is active.
+- `resume`: resume the current native goal without changing compaction settings.
 - `complete`: finish the current goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
 - `park`, `wait`, `waiting`, or `next-goal`: set a visible `Waiting for next goal.` placeholder without claiming that a current goal was completed. Use this after native completion closes the pill only when `create_goal` is unavailable; otherwise create the waiting goal natively.
 - `clear`: clear the current native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: start native context compaction only when this thread has an active native goal.
+- `disable-auto-compact`: remove plugin-added `model_auto_compact_token_limit` and `compact_prompt` keys from `~/.codex/config.toml`.
 - `smoke-test`: temporarily set and verify a native goal, then restore the previous goal.
 
 Setup accepts optional flags:
 
-- `--no-auto-compact`: leave Codex auto-compaction config untouched.
-- `--auto-compact-token-limit <number>`: set the native auto-compaction threshold. The default is `200000`.
-- `--compact-prompt "<prompt>"`: set the prompt used by Codex when compacting context.
+- `--auto-compact`: opt in to Codex's native automatic context compaction config.
+- `--no-auto-compact`: compatibility flag; auto-compaction config is already off by default.
+- `--auto-compact-token-limit <number>`: set the native auto-compaction threshold when `--auto-compact` is used. The default is `200000`.
+- `--compact-prompt "<prompt>"`: set the prompt used by Codex when compacting context when `--auto-compact` is used.
 
 Native context compaction is itself a Codex turn. Use `compact` or `auto-compact` only at a convenient idle checkpoint before continuing goal work; it cannot safely interrupt an already-running model turn.
 
@@ -71,6 +73,7 @@ Parse the user's text after `/goal-native` or `goal-native`:
 - `pause`, `resume`, `complete`, `park`, `wait`, `waiting`, `next-goal`, or `clear`: run the matching action.
 - `compact`: run `compact`.
 - `auto-compact`, `autocompact`, or `compact-if-goal`: run `auto-compact`.
+- `disable-auto-compact` or `disable-autocompact`: run `disable-auto-compact`.
 - `test` or `smoke-test`: run `smoke-test`.
 
 After every action, report whether `_native_goal_backend` is `true`. Keep the response short and include the active objective/status when present.

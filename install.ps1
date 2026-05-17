@@ -25,7 +25,7 @@ if (-not (Test-Path -LiteralPath $backend)) {
   throw "Marketplace was added, but backend script was not found: $backend"
 }
 
-Write-Host "Installing/enabling Codex Goal Tools, native goals, and auto-compact defaults..."
+Write-Host "Installing/enabling Codex Goal Tools and native goals..."
 python $backend bootstrap --workspace $Workspace
 
 Write-Host ""
