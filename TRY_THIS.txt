@@ -36,6 +36,8 @@ Manual install:
 
    $goal-native disable-auto-compact
 
+   It also installs the global ~/.codex/AGENTS.md rule that tells future threads to reopen Waiting for next goal after completing a real goal.
+
    If setup changes an existing config file, it writes a timestamped .bak backup first.
 
 Test in Codex Desktop:
@@ -53,6 +55,7 @@ Run this from a workspace that has a Codex thread:
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" bootstrap --workspace "<your-workspace-path>"
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" smoke-test --workspace "<your-workspace-path>"
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" auto-compact --workspace "<your-workspace-path>"
+   python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" install-pill-rule --workspace "<your-workspace-path>"
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" disable-auto-compact --workspace "<your-workspace-path>"
 
 Expected result:

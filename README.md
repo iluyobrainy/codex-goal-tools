@@ -10,6 +10,8 @@ The skill uses Codex Desktop's in-thread native goal tools to start new visible 
 
 If the native goal path has already closed the pill, reopen it by creating a new native goal named `Waiting for next goal.` and leave it active. This emits the live Desktop event that makes the pill visible again. Do not pause the waiting placeholder, because paused goals can be hidden by the Desktop UI. If native goal creation is unavailable, use `park` as the backend fallback.
 
+Setup also installs a small global `~/.codex/AGENTS.md` rule so new Codex threads learn the same pill-preservation behavior. Already-open threads may need to be restarted or reloaded before they pick up the global rule.
+
 ## Install From Codex Desktop
 
 Open Plugins, choose **Add marketplace**, then enter:
@@ -56,6 +58,12 @@ goals = true
 ```
 
 It does not add native auto-compaction defaults. That keeps `/goal` close to the old native `thread/goal` behavior and avoids remote compaction failures interrupting normal goal work.
+
+It also installs or refreshes the global goal-pill rule in:
+
+```text
+~/.codex/AGENTS.md
+```
 
 If you previously installed a version that added auto-compaction keys, run:
 
@@ -118,6 +126,7 @@ Expected:
 - `clear`: clear the goal.
 - `compact`: start native context compaction for the thread.
 - `auto-compact`: start native context compaction only when the thread has an active goal.
+- `install-pill-rule`: install or refresh the global AGENTS.md rule that keeps the pill alive in future threads.
 - `disable-auto-compact`: remove plugin-added automatic compaction config keys.
 - `smoke-test`: temporarily set/verify a goal, then restore the previous goal.
 

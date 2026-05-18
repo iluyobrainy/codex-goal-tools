@@ -25,6 +25,13 @@ DEFAULT_COMPACT_PROMPT = (
     "from the next concrete action without asking the user to restate context."
 )
 WAITING_FOR_NEXT_GOAL = "Waiting for next goal."
+GLOBAL_GOAL_RULE_MARKER_START = "<!-- codex-goal-tools:goal-pill-rule:start -->"
+GLOBAL_GOAL_RULE_MARKER_END = "<!-- codex-goal-tools:goal-pill-rule:end -->"
+GLOBAL_GOAL_PILL_RULE = f"""{GLOBAL_GOAL_RULE_MARKER_START}
+## Goal Pill Behavior
+
+When working with Codex native goals, completing a real goal with `update_goal(status="complete")` can close the Codex Desktop goal pill. If a real goal is completed, immediately reopen the lane before ending the turn by calling `create_goal` with the objective `Waiting for next goal.`. Leave that placeholder active so the pill stays visible for the next objective. Do not mark the waiting placeholder complete.
+{GLOBAL_GOAL_RULE_MARKER_END}"""
 
 
 def resolve_codex_executable() -> str:
@@ -196,6 +203,10 @@ def default_config_path() -> Path:
     return default_codex_home() / "config.toml"
 
 
+def default_agents_path() -> Path:
+    return default_codex_home() / "AGENTS.md"
+
+
 def quote_toml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
@@ -312,6 +323,63 @@ def ensure_goals_feature_enabled(
         "autoCompactEnabled": auto_compact_enabled,
         "autoCompactTokenLimit": auto_compact_token_limit if auto_compact else None,
         "compactPromptConfigured": bool(compact_prompt) if auto_compact else False,
+    }
+
+
+def ensure_global_goal_pill_rule(agents_path: str | None = None) -> dict[str, Any]:
+    path = Path(agents_path).expanduser() if agents_path else default_agents_path()
+    path = path.resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    original = path.read_text(encoding="utf-8") if path.exists() else ""
+    newline = "\r\n" if "\r\n" in original else "\n"
+    rule = GLOBAL_GOAL_PILL_RULE.replace("\n", newline)
+
+    legacy_rule = (
+        "# Goal Pill Behavior\n\n"
+        "When working with Codex native goals, completing a real goal with "
+        "`update_goal(status=\"complete\")` can close the Codex Desktop goal pill. "
+        "If a real goal is completed, immediately reopen the lane before ending "
+        "the turn by calling `create_goal` with the objective `Waiting for next goal.`. "
+        "Leave that placeholder active so the pill stays visible for the next objective. "
+        "Do not mark the waiting placeholder complete."
+    )
+    normalized_original = original.replace("\r\n", "\n")
+    bom = "\ufeff" if normalized_original.startswith("\ufeff") else ""
+    normalized_body = normalized_original[len(bom) :] if bom else normalized_original
+    if GLOBAL_GOAL_RULE_MARKER_START not in normalized_body and normalized_body.startswith(legacy_rule):
+        original = (bom + normalized_body[len(legacy_rule) :].lstrip("\n")).replace("\n", newline)
+
+    start = original.find(GLOBAL_GOAL_RULE_MARKER_START)
+    end = original.find(GLOBAL_GOAL_RULE_MARKER_END)
+
+    if start != -1 and end != -1 and end > start:
+        end += len(GLOBAL_GOAL_RULE_MARKER_END)
+        prefix = original[:start].rstrip()
+        suffix = original[end:]
+        updated = f"{prefix}{newline}{newline}{rule}{suffix}" if prefix else rule + suffix
+    else:
+        updated = original.rstrip()
+        if updated:
+            updated += newline + newline
+        updated += rule + newline
+
+    if updated and not updated.endswith(newline):
+        updated += newline
+
+    changed = updated != original
+    backup_path = None
+    if changed:
+        if path.exists():
+            backup_path = path.with_name(f"{path.name}.bak-{time.strftime('%Y%m%d%H%M%S')}")
+            backup_path.write_text(original, encoding="utf-8")
+        path.write_text(updated, encoding="utf-8")
+
+    return {
+        "agentsPath": str(path),
+        "changed": changed,
+        "backupPath": str(backup_path) if backup_path else None,
+        "globalGoalPillRuleInstalled": True,
     }
 
 
@@ -573,6 +641,7 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--workspace", help="Workspace path used to infer the latest thread.")
     common.add_argument("--thread-id", help="Explicit Codex thread id.")
     common.add_argument("--config-path", help="Optional Codex config.toml path for setup.")
+    common.add_argument("--agents-path", help="Optional AGENTS.md path for the global pill rule.")
     common.add_argument("--marketplace-path", help="Optional marketplace.json path for plugin install.")
     common.add_argument(
         "--no-auto-compact",
@@ -604,6 +673,8 @@ def build_parser() -> argparse.ArgumentParser:
         "bootstrap",
         "install-plugin",
         "setup",
+        "install-pill-rule",
+        "sync-pill-rule",
         "disable-auto-compact",
         "disable-autocompact",
         "status",
@@ -637,6 +708,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 auto_compact_token_limit=args.auto_compact_token_limit,
                 compact_prompt=args.compact_prompt,
             )
+            result["globalGoalPillRule"] = ensure_global_goal_pill_rule(args.agents_path)
 
         client = AppServerClient()
         try:
@@ -666,6 +738,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 auto_compact_token_limit=args.auto_compact_token_limit,
                 compact_prompt=args.compact_prompt,
             ),
+            "globalGoalPillRule": ensure_global_goal_pill_rule(args.agents_path),
         }
         try:
             client = AppServerClient()
@@ -682,6 +755,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             result["_native_goal_backend"] = False
             result["nativeCheckWarning"] = str(exc)
         return result
+
+    if args.command in {"install-pill-rule", "sync-pill-rule"}:
+        return {
+            "ok": True,
+            "globalGoalPillRule": ensure_global_goal_pill_rule(args.agents_path),
+        }
 
     if args.command in {"disable-auto-compact", "disable-autocompact"}:
         return {

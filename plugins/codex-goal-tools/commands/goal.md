@@ -22,7 +22,7 @@ Do not call native `update_goal` with `status: "complete"` for normal `/goal` co
 
 If a higher-priority active goal instruction requires native `update_goal` with `status: "complete"`, immediately reopen the lane before ending the turn. Use native `create_goal` with objective `Waiting for next goal.` so Desktop shows the pill again. Do not pause this waiting placeholder; paused goals can be hidden by the Desktop UI. If `create_goal` is unavailable, run the bridge `park` action.
 
-Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, and completion-with-waiting-placeholder. The bridge will use the running Desktop app-server proxy when its control socket is available, otherwise it falls back to a direct app-server process.
+Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-compact`, `install-pill-rule`, and completion-with-waiting-placeholder. The bridge will use the running Desktop app-server proxy when its control socket is available, otherwise it falls back to a direct app-server process.
 
 ## Arguments
 
@@ -35,6 +35,7 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 - `clear`: clear the native goal.
 - `compact`: start native context compaction for this thread.
 - `auto-compact`: compact only when this thread has an active native goal.
+- `install-pill-rule`: install or refresh the global `~/.codex/AGENTS.md` rule that keeps the pill alive in future threads.
 - `disable-auto-compact`: remove plugin-added automatic compaction config keys.
 
 `setup`, `bootstrap`, `set`, and `resume` do not enable automatic compaction by default. To opt in, run the backend setup/bootstrap command with `--auto-compact`, which configures:
@@ -67,6 +68,7 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py status --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py clear --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption
+python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py install-pill-rule --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py disable-auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption
 ```
 
