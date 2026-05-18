@@ -28,6 +28,8 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 
 - No arguments, `show`, or `status`: show the current native goal.
 - `set <objective>` or free-form objective text: set the native goal objective without changing compaction settings.
+- Long pasted goals or multi-goal packs: preserve the full text and use backend `set --goal-stdin` or `set --goal-file` instead of passing the objective as a command-line argument. This avoids native edit-box truncation and Windows command-line length limits. If the text is over the native backend's 4000-character objective limit, the bridge stores the full text in `~/.codex/goal-packs/` and sets the native goal to a short pointer.
+- Goal packs with `/goal1`, `/goal2`, etc.: keep the markers in the objective. The bridge reports detected sections, and Codex should work them in order without asking the user to paste the next one again.
 - `pause`: pause the native goal.
 - `resume`: resume the native goal without changing compaction settings.
 - `complete`: finish the native goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
@@ -55,6 +57,8 @@ compact_prompt = "Summarize this thread so the active goal can continue after co
 6. For `compact` and `auto-compact`, confirm `_native_compact_backend: true` and `compactStarted: true` when compaction starts. If the remote compact task is temporarily rejected or times out, treat `compactDeferred: true` and `goalContinues: true` as a graceful non-blocking result.
 7. For `disable-auto-compact`, confirm the returned `removedKeys` list and that `autoCompactEnabled` is `false`.
 
+For `set`, include `objectiveLength`, `goalPack.goalSectionCount`, `storedInline`, and `sidecarGoalPack.path` when present. If the user pasted `/goal1`, `/goal2`, etc., treat those as ordered sections inside the same full objective. If `storedInline` is false, read `sidecarGoalPack.path` before working because the visible native objective is only a pointer.
+
 Native context compaction is a Codex turn. It works best when invoked at an idle checkpoint before continuing a long-running goal; it cannot safely interrupt a currently active model turn. The plugin must not fail the goal just because compacting is deferred.
 
 When `complete` or `park` returns `waitingForNextGoal: true`, `pillPreserved: true`, and `completionEventSent: false`, treat the current visible placeholder as the user's next-goal parking state.
@@ -65,6 +69,7 @@ For testing, set a temporary goal, read it back, then clear it:
 
 ```powershell
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py set --workspace C:\Users\LENOVO\Desktop\iqoption --goal "Temporary native goal command test"
+"<long pasted goal text>" | python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py set --workspace C:\Users\LENOVO\Desktop\iqoption --goal-stdin
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py status --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py clear --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py auto-compact --workspace C:\Users\LENOVO\Desktop\iqoption

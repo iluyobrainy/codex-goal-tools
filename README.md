@@ -10,7 +10,7 @@ The skill uses Codex Desktop's in-thread native goal tools to start new visible 
 
 If the native goal path has already closed the pill, reopen it by creating a new native goal named `Waiting for next goal.` and leave it active. This emits the live Desktop event that makes the pill visible again. Do not pause the waiting placeholder, because paused goals can be hidden by the Desktop UI. If native goal creation is unavailable, use `park` as the backend fallback.
 
-Setup also installs a small global `~/.codex/AGENTS.md` rule so new Codex threads learn the same pill-preservation behavior. Already-open threads may need to be restarted or reloaded before they pick up the global rule.
+Setup also installs a small global `~/.codex/AGENTS.md` rule so new Codex threads learn the same pill-preservation behavior and understand `/goal1`, `/goal2`, etc. as ordered sections in a pasted goal pack. Already-open threads may need to be restarted or reloaded before they pick up the global rule.
 
 ## Install From Codex Desktop
 
@@ -119,6 +119,8 @@ Expected:
 - `install-plugin`: install/enable the plugin from its marketplace.
 - `status`: show the current thread goal.
 - `set <objective>`: set the active native goal without changing compaction settings.
+- `set --goal-stdin`: read the full objective from stdin for long pasted goals or `/goal1`/`/goal2` goal packs.
+- `set --goal-file <path>`: read the full objective from a UTF-8 file.
 - `pause`: pause the active goal.
 - `resume`: resume the active goal without changing compaction settings.
 - `complete`: finish the current goal without sending the close-pill completion event, then park visibly at `Waiting for next goal.`.
@@ -131,6 +133,17 @@ Expected:
 - `smoke-test`: temporarily set/verify a goal, then restore the previous goal.
 
 Native context compaction is itself a Codex turn. It is safest at a quiet checkpoint before continuing a goal; it cannot interrupt an already-running model turn from inside that same turn.
+
+## Long Goal Paste / Goal Packs
+
+The native Desktop **Edit goal** dialog can cut long pasted text, and the native backend rejects goal objectives over 4000 characters. The bridge avoids both limits by accepting the full objective through stdin or a UTF-8 file. If the text is too long for the native backend, it saves the full paste under `~/.codex/goal-packs/` and sets the visible native goal to a short pointer.
+
+```powershell
+$goalText | python ".\plugins\codex-goal-tools\scripts\goal_backend.py" set --workspace "C:\path\to\your\workspace" --goal-stdin
+python ".\plugins\codex-goal-tools\scripts\goal_backend.py" set --workspace "C:\path\to\your\workspace" --goal-file "C:\path\to\goals.txt"
+```
+
+If the objective contains `/goal1`, `/goal2`, and later numbered markers, Codex should treat the full objective as an ordered goal pack and continue through those sections without asking for another paste. When the command returns `storedInline: false`, read the returned `sidecarGoalPack.path`; its `## Goal Text` section is the full objective.
 
 ## Auto-Compact Usage
 

@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -17,6 +18,8 @@ from typing import Any
 
 REQUEST_TIMEOUT_SECONDS = 30
 DEFAULT_AUTO_COMPACT_TOKEN_LIMIT = 200_000
+GOAL_OBJECTIVE_BACKEND_LIMIT = 4_000
+GOAL_OBJECTIVE_INLINE_LIMIT = 3_800
 DEFAULT_COMPACT_PROMPT = (
     "Summarize this thread so the active goal can continue after context "
     "compaction. Preserve the current goal objective and status, completed "
@@ -31,7 +34,15 @@ GLOBAL_GOAL_PILL_RULE = f"""{GLOBAL_GOAL_RULE_MARKER_START}
 ## Goal Pill Behavior
 
 When working with Codex native goals, completing a real goal with `update_goal(status="complete")` can close the Codex Desktop goal pill. If a real goal is completed, immediately reopen the lane before ending the turn by calling `create_goal` with the objective `Waiting for next goal.`. Leave that placeholder active so the pill stays visible for the next objective. Do not mark the waiting placeholder complete.
+
+## Goal Pack Behavior
+
+If an active goal objective contains section markers like `/goal1`, `/goal2`, and `/goal3`, treat the text as an ordered goal pack. Preserve the whole objective as working context, start with the lowest-numbered incomplete section, and continue to the next numbered section after each one without asking the user to paste it again.
+
+If the active goal says `Goal pack file: <path>`, read that local file before working. Treat the `## Goal Text` section in that file as the full goal objective; the visible native goal is only a short pointer because the native backend rejects very long objectives.
 {GLOBAL_GOAL_RULE_MARKER_END}"""
+GOAL_SECTION_RE = re.compile(r"(?im)^\s*/goal(\d+)\b")
+GOAL_PACK_FILE_RE = re.compile(r"(?im)^Goal pack file:\s*(.+?)\s*$")
 
 
 def resolve_codex_executable() -> str:
@@ -207,6 +218,10 @@ def default_agents_path() -> Path:
     return default_codex_home() / "AGENTS.md"
 
 
+def default_goal_pack_dir() -> Path:
+    return default_codex_home() / "goal-packs"
+
+
 def quote_toml_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False)
 
@@ -380,6 +395,156 @@ def ensure_global_goal_pill_rule(agents_path: str | None = None) -> dict[str, An
         "changed": changed,
         "backupPath": str(backup_path) if backup_path else None,
         "globalGoalPillRuleInstalled": True,
+    }
+
+
+def read_goal_objective(args: argparse.Namespace) -> str:
+    sources = [
+        args.goal is not None,
+        bool(args.goal_file),
+        bool(args.goal_stdin),
+    ]
+    if sum(1 for enabled in sources if enabled) != 1:
+        raise RuntimeError("Set exactly one of --goal, --goal-file, or --goal-stdin.")
+
+    if args.goal is not None:
+        objective = args.goal
+    elif args.goal_file:
+        objective = Path(args.goal_file).expanduser().read_text(encoding="utf-8")
+    else:
+        objective = sys.stdin.read()
+
+    if not objective.strip():
+        raise RuntimeError("Goal objective is empty.")
+
+    return objective
+
+
+def goal_text_metadata(objective: str) -> dict[str, Any]:
+    sections: list[dict[str, Any]] = []
+    for match in GOAL_SECTION_RE.finditer(objective):
+        sections.append(
+            {
+                "marker": f"/goal{match.group(1)}",
+                "number": int(match.group(1)),
+                "offset": match.start(),
+            }
+        )
+
+    return {
+        "objectiveLength": len(objective),
+        "lineCount": objective.count("\n") + 1,
+        "goalPack": {
+            "detected": bool(sections),
+            "goalSectionCount": len(sections),
+            "sections": sections[:50],
+            "sectionsTruncated": len(sections) > 50,
+        },
+    }
+
+
+def sanitize_filename_part(value: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "-", value).strip("-")
+    return sanitized or "thread"
+
+
+def write_goal_pack_file(thread_id: str, objective: str) -> Path:
+    directory = default_goal_pack_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"{timestamp}-{sanitize_filename_part(thread_id)}.md"
+    path = directory / filename
+    path.write_text(
+        "\n".join(
+            [
+                "# Codex Goal Pack",
+                "",
+                f"- Thread ID: {thread_id}",
+                f"- Created at: {timestamp}",
+                f"- Objective length: {len(objective)} characters",
+                "",
+                "## Goal Text",
+                "",
+                objective,
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def summarize_goal_sections(metadata: dict[str, Any]) -> str:
+    sections = metadata.get("goalPack", {}).get("sections", [])
+    if not sections:
+        return "none"
+    labels = [section["marker"] for section in sections[:20]]
+    suffix = ", ..." if metadata.get("goalPack", {}).get("sectionsTruncated") else ""
+    return ", ".join(labels) + suffix
+
+
+def build_goal_pack_pointer_objective(
+    *,
+    goal_pack_path: Path,
+    objective: str,
+    metadata: dict[str, Any],
+) -> str:
+    header = "\n".join(
+        [
+            "Goal pack stored by Codex Goal Tools.",
+            f"Goal pack file: {goal_pack_path}",
+            f"Original objective length: {len(objective)} characters",
+            f"Detected goal sections: {summarize_goal_sections(metadata)}",
+            "Before working, read the goal pack file and follow the /goalN sections in order.",
+            "",
+            "Preview:",
+            "",
+        ]
+    )
+    footer = "\n\n[Preview truncated. Read the goal pack file for the full objective.]"
+    preview_budget = GOAL_OBJECTIVE_BACKEND_LIMIT - len(header) - len(footer)
+    preview = objective[: max(0, preview_budget)]
+    pointer = header + preview
+    if len(preview) < len(objective):
+        pointer += footer
+    if len(pointer) > GOAL_OBJECTIVE_BACKEND_LIMIT:
+        pointer = pointer[: GOAL_OBJECTIVE_BACKEND_LIMIT - 3] + "..."
+    return pointer
+
+
+def prepare_goal_objective_for_backend(
+    thread_id: str,
+    objective: str,
+    metadata: dict[str, Any],
+) -> tuple[str, dict[str, Any] | None]:
+    if len(objective) <= GOAL_OBJECTIVE_INLINE_LIMIT:
+        return objective, None
+
+    goal_pack_path = write_goal_pack_file(thread_id, objective)
+    pointer = build_goal_pack_pointer_objective(
+        goal_pack_path=goal_pack_path,
+        objective=objective,
+        metadata=metadata,
+    )
+    return pointer, {
+        "path": str(goal_pack_path),
+        "originalObjectiveLength": len(objective),
+        "nativeObjectiveLength": len(pointer),
+        "storedFullObjective": True,
+    }
+
+
+def sidecar_metadata_from_goal(goal: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not goal:
+        return None
+    objective = str(goal.get("objective") or "")
+    match = GOAL_PACK_FILE_RE.search(objective)
+    if not match:
+        return None
+    path = Path(match.group(1)).expanduser()
+    return {
+        "path": str(path),
+        "exists": path.exists(),
+        "sizeBytes": path.stat().st_size if path.exists() else None,
     }
 
 
@@ -666,7 +831,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     set_parser = subparsers.add_parser("set", parents=[common], help="Set native thread goal.")
-    set_parser.add_argument("--goal", required=True, help="Goal objective.")
+    set_parser.add_argument("--goal", help="Goal objective.")
+    set_parser.add_argument("--goal-file", help="Read the full goal objective from a UTF-8 text file.")
+    set_parser.add_argument(
+        "--goal-stdin",
+        action="store_true",
+        help="Read the full goal objective from standard input.",
+    )
     set_parser.add_argument("--token-budget", type=int, default=None, help="Optional token budget.")
 
     for name in (
@@ -774,16 +945,30 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         thread_id = with_thread_id(args, client)
 
         if args.command == "set":
+            objective = read_goal_objective(args)
+            metadata = goal_text_metadata(objective)
+            backend_objective, sidecar_goal_pack = prepare_goal_objective_for_backend(
+                thread_id,
+                objective,
+                metadata,
+            )
             params: dict[str, Any] = {
                 "threadId": thread_id,
-                "objective": args.goal,
+                "objective": backend_objective,
                 "status": "active",
             }
             if args.token_budget is not None:
                 params["tokenBudget"] = args.token_budget
             result = client.request("thread/goal/set", params)
+            result.update(metadata)
+            result["storedInline"] = sidecar_goal_pack is None
+            if sidecar_goal_pack:
+                result["sidecarGoalPack"] = sidecar_goal_pack
         elif args.command in {"status", "show"}:
             result = client.request("thread/goal/get", {"threadId": thread_id})
+            sidecar_goal_pack = sidecar_metadata_from_goal(result.get("goal"))
+            if sidecar_goal_pack:
+                result["sidecarGoalPack"] = sidecar_goal_pack
         elif args.command == "pause":
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "paused"})
         elif args.command == "resume":

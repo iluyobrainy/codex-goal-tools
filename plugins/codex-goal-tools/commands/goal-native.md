@@ -24,6 +24,8 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 
 - No arguments, `show`, or `status`: show the current native goal.
 - `set <objective>` or any other free-form text: set the native goal objective without changing compaction settings.
+- Long pasted goals or multi-goal packs: preserve the full text and use backend `set --goal-stdin` or `set --goal-file` instead of passing the objective as a command-line argument. This avoids native edit-box truncation and Windows command-line length limits. If the text is over the native backend's 4000-character objective limit, the bridge stores the full text in `~/.codex/goal-packs/` and sets the native goal to a short pointer.
+- Goal packs with `/goal1`, `/goal2`, etc.: keep the markers in the objective. The bridge reports detected sections, and Codex should work them in order without asking the user to paste the next one again.
 - `pause`: pause the native goal.
 - `resume`: resume the native goal without changing compaction settings.
 - `complete`: finish the native goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
@@ -45,6 +47,7 @@ Use the Python bridge for `setup`, `pause`, `resume`, `clear`, `compact`, `auto-
 ```powershell
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py status --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py set --workspace C:\Users\LENOVO\Desktop\iqoption --goal "<objective>"
+"<long pasted goal text>" | python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py set --workspace C:\Users\LENOVO\Desktop\iqoption --goal-stdin
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py pause --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py resume --workspace C:\Users\LENOVO\Desktop\iqoption
 python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-tools\scripts\goal_backend.py complete --workspace C:\Users\LENOVO\Desktop\iqoption
@@ -57,7 +60,7 @@ python C:\Users\LENOVO\.codex\local-marketplaces\goal-tools\plugins\codex-goal-t
 
 ## Verification
 
-After every operation, report whether the JSON output includes `_native_goal_backend: true`. Report `_app_server_transport` when it is present: `proxy` is live Desktop transport, `direct` is backend state transport. For `set`, include the native `objective`, `status`, `tokensUsed`, and `timeUsedSeconds` fields.
+After every operation, report whether the JSON output includes `_native_goal_backend: true`. Report `_app_server_transport` when it is present: `proxy` is live Desktop transport, `direct` is backend state transport. For `set`, include the native `objective`, `status`, `tokensUsed`, `timeUsedSeconds`, `objectiveLength`, `goalPack.goalSectionCount`, `storedInline`, and `sidecarGoalPack.path` fields when present. If `storedInline` is false, read `sidecarGoalPack.path` before working because the visible native objective is only a pointer.
 
 For `compact` and `auto-compact`, report whether `_native_compact_backend: true` and `compactStarted: true` are present. If `compactDeferred: true` is returned, report it as a graceful non-blocking result and continue the goal. If `compactStarted` is false for another reason, show the returned reason. Native compaction is a Codex turn and is safest at an idle checkpoint before continuing goal work.
 

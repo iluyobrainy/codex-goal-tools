@@ -36,7 +36,7 @@ Manual install:
 
    $goal-native disable-auto-compact
 
-   It also installs the global ~/.codex/AGENTS.md rule that tells future threads to reopen Waiting for next goal after completing a real goal.
+   It also installs the global ~/.codex/AGENTS.md rule that tells future threads to reopen Waiting for next goal after completing a real goal and to read local goal-pack files for long pasted goals.
 
    If setup changes an existing config file, it writes a timestamped .bak backup first.
 
@@ -70,6 +70,12 @@ Native compaction is itself a Codex turn. Run auto-compact at an idle checkpoint
 Set a test goal:
 
    python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" set --workspace "<your-workspace-path>" --goal "Test native goal bridge"
+
+Set a long pasted goal pack without losing text:
+
+   Get-Content ".\goals.txt" -Raw | python "<path-to-this-folder>\plugins\codex-goal-tools\scripts\goal_backend.py" set --workspace "<your-workspace-path>" --goal-stdin
+
+If the text is over the native backend limit, the bridge stores the full paste in ~/.codex/goal-packs/ and sets the visible native goal to a short pointer. Use /goal1, /goal2, etc. inside the pasted text when you want ordered goal sections.
 
 Clear it:
 

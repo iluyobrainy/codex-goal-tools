@@ -40,6 +40,8 @@ Supported actions:
 - `setup`: ensure `~/.codex/config.toml` contains `[features] goals = true`, install the global AGENTS.md goal-pill rule, then check the native backend when a thread is available. It does not add auto-compaction defaults unless `--auto-compact` is passed.
 - `status`: show the current native goal.
 - `set --goal "<objective>"`: set the current native goal objective without changing compaction settings.
+- `set --goal-stdin`: read the full native goal objective from standard input. Use this for long pasted goals or multi-goal packs so Windows command-line length limits and native edit-box truncation do not cut the text.
+- `set --goal-file "<path>"`: read the full native goal objective from a UTF-8 text file.
 - `pause`: pause the current native goal.
 - `resume`: resume the current native goal without changing compaction settings.
 - `complete`: finish the current goal without sending the close-pill completion event, then leave a visible `Waiting for next goal.` placeholder so the goal lane stays ready for the next objective.
@@ -71,6 +73,7 @@ Parse the user's text after `/goal-native` or `goal-native`:
 - `setup` or `install`: run `setup`.
 - Empty, `show`, or `status`: run `status`.
 - `set <objective>` or any free-form goal text: run `set --goal "<objective>"`.
+- For long or multi-section pasted text, especially text with `/goal1`, `/goal2`, etc., preserve the exact text and run `set --goal-stdin` or `set --goal-file` instead of placing the whole objective in a command-line argument.
 - `pause`, `resume`, `complete`, `park`, `wait`, `waiting`, `next-goal`, or `clear`: run the matching action.
 - `compact`: run `compact`.
 - `auto-compact`, `autocompact`, or `compact-if-goal`: run `auto-compact`.
@@ -79,6 +82,10 @@ Parse the user's text after `/goal-native` or `goal-native`:
 - `test` or `smoke-test`: run `smoke-test`.
 
 After every action, report whether `_native_goal_backend` is `true`. Keep the response short and include the active objective/status when present.
+
+For `set`, also report `objectiveLength` and `goalPack.goalSectionCount` when present. If `/goalN` markers are detected, treat the objective as an ordered goal pack and continue through the numbered sections as working context.
+
+The native backend rejects objectives over 4000 characters. When the bridge returns `storedInline: false` and `sidecarGoalPack.path`, the full pasted text was saved to that local file and the native goal was set to a short pointer. Before working that goal, read `sidecarGoalPack.path` and use its `## Goal Text` section as the full objective.
 
 Also report `_app_server_transport` when it is present. `proxy` means the bridge used the running Desktop app-server control socket for better UI sync; `direct` means it used a separate app-server process and may update the UI only after Desktop observes the backend state.
 
