@@ -16,6 +16,13 @@ from typing import Any
 
 
 REQUEST_TIMEOUT_SECONDS = 30
+DEFAULT_AUTO_COMPACT_TOKEN_LIMIT = 200_000
+DEFAULT_COMPACT_PROMPT = (
+    "Summarize this thread so the active goal can continue after context "
+    "compaction. Preserve the current goal objective and status, completed "
+    "work, remaining tasks, important files, commands, failures, decisions, "
+    "and the next concrete action."
+)
 
 
 class AppServerClient:
@@ -115,7 +122,47 @@ def default_config_path() -> Path:
     return Path.home() / ".codex" / "config.toml"
 
 
-def ensure_goals_feature_enabled(config_path: str | None = None) -> dict[str, Any]:
+def quote_toml_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def upsert_top_level_key(lines: list[str], key: str, value: str) -> tuple[list[str], bool]:
+    output: list[str] = []
+    replaced = False
+    inserted = False
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        is_section = stripped.startswith("[") and stripped.endswith("]")
+
+        if is_section and not replaced and not inserted:
+            output.append(f"{key} = {value}")
+            output.append("")
+            inserted = True
+
+        if not is_section and stripped.startswith(f"{key}") and "=" in stripped and not replaced:
+            output.append(f"{key} = {value}")
+            replaced = True
+            continue
+
+        output.append(line)
+
+    if not replaced and not inserted:
+        if output and output[-1].strip():
+            output.append("")
+        output.append(f"{key} = {value}")
+        inserted = True
+
+    return output, replaced or inserted
+
+
+def ensure_goals_feature_enabled(
+    config_path: str | None = None,
+    *,
+    auto_compact: bool = True,
+    auto_compact_token_limit: int = DEFAULT_AUTO_COMPACT_TOKEN_LIMIT,
+    compact_prompt: str | None = DEFAULT_COMPACT_PROMPT,
+) -> dict[str, Any]:
     path = Path(config_path).expanduser() if config_path else default_config_path()
     path = path.resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,6 +203,21 @@ def ensure_goals_feature_enabled(config_path: str | None = None) -> dict[str, An
             output.append("")
         output.extend(["[features]", "goals = true"])
 
+    auto_compact_enabled = False
+    if auto_compact:
+        output, _ = upsert_top_level_key(
+            output,
+            "model_auto_compact_token_limit",
+            str(auto_compact_token_limit),
+        )
+        if compact_prompt:
+            output, _ = upsert_top_level_key(
+                output,
+                "compact_prompt",
+                quote_toml_string(compact_prompt),
+            )
+        auto_compact_enabled = True
+
     updated = newline.join(output)
     if updated or not original:
         updated += newline
@@ -173,6 +235,9 @@ def ensure_goals_feature_enabled(config_path: str | None = None) -> dict[str, An
         "changed": changed,
         "backupPath": str(backup_path) if backup_path else None,
         "goalsEnabled": True,
+        "autoCompactEnabled": auto_compact_enabled,
+        "autoCompactTokenLimit": auto_compact_token_limit if auto_compact else None,
+        "compactPromptConfigured": bool(compact_prompt) if auto_compact else False,
     }
 
 
@@ -238,6 +303,31 @@ def with_thread_id(args: argparse.Namespace, client: AppServerClient) -> str:
     return args.thread_id or infer_thread_id(client, normalize_workspace(args.workspace))
 
 
+def start_context_compaction(client: AppServerClient, thread_id: str) -> dict[str, Any]:
+    try:
+        result = client.request("thread/compact/start", {"threadId": thread_id})
+        return {
+            "ok": True,
+            "threadId": thread_id,
+            "compactStarted": True,
+            "response": result,
+        }
+    except RuntimeError as exc:
+        error = str(exc)
+        if "thread not found" not in error:
+            raise
+
+    client.request("thread/resume", {"threadId": thread_id})
+    result = client.request("thread/compact/start", {"threadId": thread_id})
+    return {
+        "ok": True,
+        "threadId": thread_id,
+        "compactStarted": True,
+        "loadedThreadBeforeCompact": True,
+        "response": result,
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Call Codex's native thread/goal backend through app-server."
@@ -249,6 +339,22 @@ def build_parser() -> argparse.ArgumentParser:
     common.add_argument("--thread-id", help="Explicit Codex thread id.")
     common.add_argument("--config-path", help="Optional Codex config.toml path for setup.")
     common.add_argument("--marketplace-path", help="Optional marketplace.json path for plugin install.")
+    common.add_argument(
+        "--no-auto-compact",
+        action="store_true",
+        help="Do not add native Codex auto-compact defaults during setup/bootstrap.",
+    )
+    common.add_argument(
+        "--auto-compact-token-limit",
+        type=int,
+        default=DEFAULT_AUTO_COMPACT_TOKEN_LIMIT,
+        help="Token threshold for native Codex auto-compaction during setup/bootstrap.",
+    )
+    common.add_argument(
+        "--compact-prompt",
+        default=DEFAULT_COMPACT_PROMPT,
+        help="Prompt Codex should use when compacting context.",
+    )
 
     set_parser = subparsers.add_parser("set", parents=[common], help="Set native thread goal.")
     set_parser.add_argument("--goal", required=True, help="Goal objective.")
@@ -264,6 +370,10 @@ def build_parser() -> argparse.ArgumentParser:
         "resume",
         "complete",
         "clear",
+        "compact",
+        "auto-compact",
+        "autocompact",
+        "compact-if-goal",
         "smoke-test",
     ):
         subparsers.add_parser(name, parents=[common], help=f"{name.title()} native thread goal.")
@@ -275,7 +385,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command in {"bootstrap", "install-plugin"}:
         result: dict[str, Any] = {"ok": True}
         if args.command == "bootstrap":
-            result["setup"] = ensure_goals_feature_enabled(args.config_path)
+            result["setup"] = ensure_goals_feature_enabled(
+                args.config_path,
+                auto_compact=not args.no_auto_compact,
+                auto_compact_token_limit=args.auto_compact_token_limit,
+                compact_prompt=args.compact_prompt,
+            )
 
         client = AppServerClient()
         try:
@@ -297,7 +412,12 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "setup":
         result: dict[str, Any] = {
             "ok": True,
-            "setup": ensure_goals_feature_enabled(args.config_path),
+            "setup": ensure_goals_feature_enabled(
+                args.config_path,
+                auto_compact=not args.no_auto_compact,
+                auto_compact_token_limit=args.auto_compact_token_limit,
+                compact_prompt=args.compact_prompt,
+            ),
         }
         try:
             client = AppServerClient()
@@ -338,6 +458,23 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             result = client.request("thread/goal/set", {"threadId": thread_id, "status": "complete"})
         elif args.command == "clear":
             result = client.request("thread/goal/clear", {"threadId": thread_id})
+        elif args.command == "compact":
+            result = start_context_compaction(client, thread_id)
+            result["_native_compact_backend"] = True
+        elif args.command in {"auto-compact", "autocompact", "compact-if-goal"}:
+            goal = client.request("thread/goal/get", {"threadId": thread_id}).get("goal")
+            if not goal or goal.get("status") != "active":
+                result = {
+                    "ok": True,
+                    "threadId": thread_id,
+                    "compactStarted": False,
+                    "reason": "No active goal is running for this thread.",
+                    "goal": goal,
+                }
+            else:
+                result = start_context_compaction(client, thread_id)
+                result["goal"] = goal
+            result["_native_compact_backend"] = bool(result.get("compactStarted"))
         elif args.command == "smoke-test":
             previous = client.request("thread/goal/get", {"threadId": thread_id}).get("goal")
             probe = f"Goal backend smoke test {int(time.time())}"

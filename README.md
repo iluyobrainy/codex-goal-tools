@@ -4,6 +4,8 @@ Expose Codex's native experimental thread goal backend in Codex Desktop through 
 
 This is not a fake goal store. The `goal-native` skill calls Codex's native `thread/goal/*` app-server API.
 
+Version `0.3.0` also adds goal-aware context compaction support. Setup can configure Codex's native auto-compaction threshold, and the plugin can call `thread/compact/start` at an idle checkpoint before long-running goal work continues.
+
 ## Install From Codex Desktop
 
 Open Plugins, choose **Add marketplace**, then enter:
@@ -49,6 +51,15 @@ This safely ensures `~/.codex/config.toml` contains:
 goals = true
 ```
 
+It also adds native auto-compaction defaults:
+
+```toml
+model_auto_compact_token_limit = 200000
+compact_prompt = "Summarize this thread so the active goal can continue after context compaction..."
+```
+
+Use `--no-auto-compact` with the backend script if you want setup to leave those config keys untouched.
+
 If setup changes an existing config file, it creates a timestamped `.bak` backup first.
 
 Then test:
@@ -91,7 +102,27 @@ Expected:
 - `resume`: resume the active goal.
 - `complete`: mark the goal complete.
 - `clear`: clear the goal.
+- `compact`: start native context compaction for the thread.
+- `auto-compact`: start native context compaction only when the thread has an active goal.
 - `smoke-test`: temporarily set/verify a goal, then restore the previous goal.
+
+Native context compaction is itself a Codex turn. It is safest at a quiet checkpoint before continuing a goal; it cannot interrupt an already-running model turn from inside that same turn.
+
+## Auto-Compact Usage
+
+After install or update, run:
+
+```text
+$goal-native setup
+```
+
+Then, before continuing a long goal when the context is getting heavy, run:
+
+```text
+$goal-native auto-compact
+```
+
+The command reports `_native_compact_backend: true` and `compactStarted: true` when Codex accepts the compaction request.
 
 ## Notes
 
